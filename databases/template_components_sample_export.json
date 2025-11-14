@@ -1,0 +1,99 @@
+{
+  "generated_at": "2025-11-14T22:28:18.708889+00:00",
+  "aws_region": "us-east-1",
+  "table_metadata": {
+    "table_name": "template_components",
+    "table_status": "ACTIVE",
+    "creation_date": "2025-11-06T15:41:02.310000-05:00",
+    "item_count": 4,
+    "table_size_bytes": 5581,
+    "table_size_mb": 0.01,
+    "billing_mode": "PAY_PER_REQUEST"
+  },
+  "schema": {
+    "key_schema": [
+      {
+        "attribute_name": "component_id",
+        "key_type": "Partition Key"
+      }
+    ],
+    "attributes": {
+      "component_id": {
+        "type": "S",
+        "is_key": true,
+        "key_type": "Partition Key"
+      }
+    },
+    "global_secondary_indexes": null,
+    "local_secondary_indexes": null
+  },
+  "sample_records": [
+    {
+      "editable_fields": [
+        "logo_url"
+      ],
+      "component_type": "header",
+      "component_id": "header",
+      "name": "Standard Header",
+      "default_values": {
+        "logo_url": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png"
+      },
+      "html_template": "\n                <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">\n                <tr><td style=\"padding:12px 48px\" align=\"center\">\n                <img alt=\"Logo\" src=\"https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png\" width=\"172\" height=\"auto\" style=\"display:block;max-width:100%;height:auto\" />\n                </td></tr></table>\n                "
+    },
+    {
+      "editable_fields": [
+        "section_title",
+        "section_subtitle"
+      ],
+      "component_type": "product_section",
+      "component_id": "multi_product",
+      "name": "Multiple Product Layout",
+      "default_values": {
+        "section_title": "Featured Collection",
+        "section_subtitle": "We've selected these exclusive items just for you!"
+      },
+      "html_template": "\n                <tr><td style=\"padding:20px 24px;text-align:center\">\n                <h2 style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:24px;font-weight:bold;color:#000000;\">{section_title}</h2>\n                <p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#000000;\">{section_subtitle}</p>\n                </td></tr>\n                <tr><td style=\"padding:0 24px 30px 24px\">\n                <table align=\"center\" width=\"100%\" style=\"max-width:600px;\">\n                <tr>\n                <!-- Product slots will be dynamically inserted here based on available products -->\n                {product_slots}\n                </tr></table>\n                </td></tr>\n                "
+    },
+    {
+      "editable_fields": [
+        "company_name",
+        "company_address",
+        "unsubscribe_url"
+      ],
+      "component_type": "footer",
+      "component_id": "footer",
+      "name": "Standard Footer",
+      "default_values": {
+        "unsubscribe_url": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+        "company_address": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+        "company_name": "R and R Imports, Inc"
+      },
+      "html_template": "\n                <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"background-color:#1d1d1d;\">\n                <tr><td style=\"padding:20px 0; text-align:center;\">\n                <table style=\"margin:0 auto;\" cellpadding=\"0\" cellspacing=\"0\">\n                <tr>\n                <td style=\"padding:0 10px;\">\n                <a href=\"https://www.facebook.com/rrinconline/\" target=\"_blank\">\n                <img width=\"40\" height=\"40\" alt=\"Facebook\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/facebook-filled-light-40.png\" style=\"border-radius:50%;display:block;\">\n                </a></td>\n                <td style=\"padding:0 10px;\">\n                <a href=\"https://www.instagram.com/rrinc/\" target=\"_blank\">\n                <img width=\"40\" height=\"40\" alt=\"Instagram\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/instagram-filled-light-40.png\" style=\"border-radius:50%;display:block;\">\n                </a></td>\n                <td style=\"padding:0 10px;\">\n                <a href=\"https://www.tiktok.com/@randrinc\" target=\"_blank\">\n                <img width=\"40\" height=\"40\" alt=\"TikTok\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/tiktok-filled-light-40.png\" style=\"border-radius:50%;display:block;\">\n                </a></td>\n                </tr></table>\n                </td></tr>\n                <tr><td style=\"padding:10px 20px; text-align:center; color:#ffffff; font-size:12px;\">\n                Our mailing address is:<br><strong>{company_name}</strong><br>{company_address}\n                </td></tr>\n                <tr><td style=\"padding:10px 20px; text-align:center;\">\n                <a href=\"{unsubscribe_url}\" style=\"color:#ffffff; text-decoration:underline;\">Unsubscribe here</a>\n                </td></tr>\n                </table>\n                "
+    },
+    {
+      "editable_fields": [
+        "section_title",
+        "section_subtitle"
+      ],
+      "component_type": "product_section",
+      "component_id": "single_product",
+      "name": "Single Product Layout",
+      "default_values": {
+        "section_title": "Featured Product",
+        "section_subtitle": "We've selected this exclusive item just for you!"
+      },
+      "html_template": "\n                <tr><td style=\"padding:20px 24px;text-align:center\">\n                <h2 style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:24px;font-weight:bold;color:#000000;\">{section_title}</h2>\n                <p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#000000;\">{section_subtitle}</p>\n                </td></tr>\n                <tr><td style=\"padding:0 24px 30px 24px\">\n                <table align=\"center\" width=\"100%\" style=\"max-width:400px;\">\n                <tr><td align=\"center\" style=\"height:300px;\">\n                <a href=\"{product_link_1}\" target=\"_blank\">\n                <img src=\"{product_image_1}\" alt=\"{product_name_1}\" style=\"display:block;border:0;max-width:300px;max-height:300px;border-radius:8px;\" />\n                </a></td></tr>\n                <tr><td align=\"center\" style=\"padding-top:10px;\">\n                <p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#333333;\">{product_name_1}</p>\n                <p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:20px;font-weight:bold;color:#000000;\">${product_price_1}</p>\n                <a href=\"{product_link_1}\" target=\"_blank\" style=\"display:inline-block;background-color:#000000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;\">Shop Now</a>\n                </td></tr></table>\n                </td></tr>\n                "
+    }
+  ],
+  "usage_notes": {
+    "description": "DynamoDB table: template_components",
+    "access_patterns": "Review sample records to understand query patterns and attribute structure.",
+    "notes": [
+      "Sample records show real data fields",
+      "Attributes include key schema + strongly typed fields",
+      "Use partition key for direct lookups",
+      "Billing mode affects read/write cost",
+      "This JSON helps engineers understand the data model instantly"
+    ]
+  }
+}

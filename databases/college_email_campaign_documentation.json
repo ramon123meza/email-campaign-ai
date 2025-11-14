@@ -1,0 +1,88 @@
+{
+  "generated_at": "2025-11-06T14:41:59.197626",
+  "aws_region": "us-east-1",
+  "table_metadata": {
+    "table_name": "college_email_campaign",
+    "table_status": "ACTIVE",
+    "creation_date": "2025-11-06T13:39:04.568000-05:00",
+    "item_count": 0,
+    "table_size_bytes": 0,
+    "table_size_mb": 0.0,
+    "billing_mode": "PAY_PER_REQUEST"
+  },
+  "schema": {
+    "key_schema": [
+      {
+        "attribute_name": "customer_email",
+        "key_type": "Partition Key"
+      }
+    ],
+    "attributes": {
+      "customer_email": {
+        "type": "String",
+        "is_key": true,
+        "key_type": "Partition Key"
+      },
+      "source": {
+        "type": "String",
+        "is_key": false,
+        "key_type": null
+      },
+      "school_code": {
+        "type": "String",
+        "is_key": false,
+        "key_type": null
+      },
+      "customer_name": {
+        "type": "String",
+        "is_key": false,
+        "key_type": null
+      }
+    },
+    "global_secondary_indexes": null,
+    "local_secondary_indexes": null
+  },
+  "sample_records": [
+    {
+      "source": "Shopify",
+      "school_code": "HOUS",
+      "customer_email": "jwolvin@hotmail.com",
+      "customer_name": "Janet"
+    },
+    {
+      "source": "Etsy",
+      "school_code": "WVU",
+      "customer_email": "robinbaswell@gmail.com",
+      "customer_name": "Robin"
+    },
+    {
+      "source": "Shopify",
+      "school_code": "HOUS",
+      "customer_email": "t.mareemorgan@gmail.com",
+      "customer_name": "Tia"
+    },
+    {
+      "source": "Shopify",
+      "school_code": "HOUS",
+      "customer_email": "prestonwpk@aol.com",
+      "customer_name": "Louise"
+    },
+    {
+      "source": "Shopify",
+      "school_code": "SDO",
+      "customer_email": "wittmerjrs@gmail.com",
+      "customer_name": "Scott"
+    }
+  ],
+  "usage_notes": {
+    "description": "DynamoDB table: college_email_campaign",
+    "access_patterns": "Review sample records to understand typical query patterns",
+    "notes": [
+      "Sample records show actual data structure and values",
+      "All attributes found in sample records are listed in the schema",
+      "Key attributes are marked with is_key: true",
+      "Use partition key for direct lookups",
+      "Billing mode indicates cost structure (PAY_PER_REQUEST or PROVISIONED)"
+    ]
+  }
+}

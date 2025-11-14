@@ -1,0 +1,273 @@
+{
+  "generated_at": "2025-11-14T22:28:18.459677+00:00",
+  "aws_region": "us-east-1",
+  "table_metadata": {
+    "table_name": "campaign_template_instances",
+    "table_status": "ACTIVE",
+    "creation_date": "2025-11-14T15:27:41.528000-05:00",
+    "item_count": 0,
+    "table_size_bytes": 0,
+    "table_size_mb": 0.0,
+    "billing_mode": "PAY_PER_REQUEST"
+  },
+  "schema": {
+    "key_schema": [
+      {
+        "attribute_name": "campaign_id",
+        "key_type": "Partition Key"
+      }
+    ],
+    "attributes": {
+      "campaign_id": {
+        "type": "S",
+        "is_key": true,
+        "key_type": "Partition Key"
+      }
+    },
+    "global_secondary_indexes": null,
+    "local_secondary_indexes": null
+  },
+  "sample_records": [
+    {
+      "template_html": "<!DOCTYPE html>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\">\n<head>\n<title>New Collection Available!</title>\n<!--[if !mso]><!-->\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n<!--<![endif]-->\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<style type=\"text/css\">\n#outlook a { padding:0; }\nbody { margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%; }\ntable, td { border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt; }\nimg { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-ms-interpolation-mode:bicubic; }\n</style>\n</head>\n<body>\n<center>\n<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" height=\"100%\" width=\"100%\" style=\"background-color: #f4f4f4;\">\n<tbody><tr>\n<td align=\"center\" valign=\"top\">\n<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:660px;\">\n<tbody>\n\n<!-- HEADER SECTION -->\n<tr id=\"header-section\"><td style=\"background-color:#ffffff; padding:12px 48px; text-align:center;\">\n<img alt=\"R and R Imports, Inc\" src=\"https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png\" width=\"172\" height=\"auto\" style=\"display:block; max-width:100%; height:auto; margin:0 auto;\" />\n</td></tr>\n\n<!-- MAIN TITLE SECTION -->\n<tr id=\"title-section\"><td style=\"background-color:#ffffff; padding:20px 24px; text-align:center;\">\n<div style=\"border-top:2px solid #000000; margin-bottom:20px;\"></div>\n<h1 style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:32px; font-weight:bold; color:#8b5cf6; margin:0; line-height:1.2;\">\nDiscover Our Latest Arrivals!\n</h1>\n</td></tr>\n\n<!-- HERO IMAGE SECTION -->\n<tr id=\"hero-section\"><td style=\"background-color:#ffffff; padding:12px 0;\">\n<a href=\"#\" target=\"_blank\">\n<img src=\"https://via.placeholder.com/600x300?text=Hero+Image\" alt=\"Campaign Hero Image\" style=\"display:block; max-width:100%; height:auto; border-radius:10px;\" />\n</a>\n</td></tr>\n\n<!-- CONTENT SECTION -->\n<tr id=\"content-section\"><td style=\"background-color:#ffffff; padding:12px 24px; text-align:center;\">\n<p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; color:#000000; margin:10px 0;\">\nHi there,\n</p>\n<p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; color:#000000; margin:10px 0;\">\nCheck out our latest collection selected just for you!\n</p>\n</td></tr>\n\n<!-- PRODUCTS SECTION -->\n<tr id=\"products-section\"><td style=\"background-color:#ffffff; padding:20px 24px; text-align:center;\">\n<h2 style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:24px; font-weight:bold; color:#000000; margin:0 0 10px 0;\">\nFeatured Collection\n</h2>\n<p style=\"font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; color:#000000; margin:0 0 20px 0;\">\nWe've selected these exclusive items just for you!\n</p>\n\n<!-- DYNAMIC PRODUCTS GRID -->\n<table align=\"center\" width=\"100%\" style=\"max-width:600px;\">\n<tr>\n<!-- Products will be dynamically inserted here -->\n</tr>\n</table>\n\n</td></tr>\n\n<!-- CTA SECTION -->\n<tr id=\"cta-section\"><td style=\"background-color:#ffffff; padding:12px 24px; text-align:center;\">\n<a href=\"#\" target=\"_blank\" style=\"display:inline-block; background-color:#10b981; color:#000000; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;\">\nShop Collection\n</a>\n</td></tr>\n\n<tr><td style=\"background-color:#ffffff;\">\n<div style=\"border-top:2px solid #000000; margin:20px 24px;\"></div>\n</td></tr>\n\n<!-- FOOTER SECTION -->\n<tr id=\"footer-section\"><td style=\"background-color:#1d1d1d; padding:20px 0; text-align:center;\">\n<table style=\"margin:0 auto;\" cellpadding=\"0\" cellspacing=\"0\">\n<tr>\n<td style=\"padding:0 10px;\">\n<a href=\"https://www.facebook.com/rrinconline/\" target=\"_blank\">\n<img width=\"40\" height=\"40\" alt=\"Facebook\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/facebook-filled-light-40.png\" style=\"border-radius:50%; display:block;\">\n</a></td>\n<td style=\"padding:0 10px;\">\n<a href=\"https://www.instagram.com/rrinc/\" target=\"_blank\">\n<img width=\"40\" height=\"40\" alt=\"Instagram\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/instagram-filled-light-40.png\" style=\"border-radius:50%; display:block;\">\n</a></td>\n<td style=\"padding:0 10px;\">\n<a href=\"https://www.tiktok.com/@randrinc\" target=\"_blank\">\n<img width=\"40\" height=\"40\" alt=\"TikTok\" src=\"https://cdn-images.mailchimp.com/icons/social-block-v3/block-icons-v3/tiktok-filled-light-40.png\" style=\"border-radius:50%; display:block;\">\n</a></td>\n</tr>\n</table>\n<p style=\"color:#ffffff; font-size:12px; margin:10px 20px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;\">\nOur mailing address is:<br><strong>R and R Imports, Inc</strong><br>5271 Lee Hwy, Troutville, VA 24175-7555 USA\n</p>\n<p style=\"margin:10px 20px; text-align:center;\">\n<a href=\"https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html\" style=\"color:#ffffff; text-decoration:underline; font-size:12px;\">Unsubscribe here</a>\n</p>\n</td></tr>\n\n</tbody></table>\n</td></tr></tbody></table>\n</center>\n</body>\n</html>",
+      "created_at": "2025-11-14T22:03:58.729143",
+      "version_history": [
+        {
+          "changes_made": "Changed button color to green",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "New Collection Just Dropped!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#000000",
+            "CTA_BG_COLOR": "#7ac4c9",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Make button green",
+          "processing_type": "simple",
+          "timestamp": "2025-11-14T22:04:58.958345"
+        },
+        {
+          "changes_made": "The main title was updated from 'New Collection Just Dropped!' to 'Discover Our Latest Arrivals!' as per the user's request.",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "New Collection Just Dropped!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#000000",
+            "CTA_BG_COLOR": "#00cc66",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Update main title",
+          "processing_type": "advanced",
+          "timestamp": "2025-11-14T22:05:06.818741"
+        },
+        {
+          "changes_made": "The button background color was changed from #00cc66 to #10b981 as requested.",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "Discover Our Latest Arrivals!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#000000",
+            "CTA_BG_COLOR": "#00cc66",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Change the button color to #10b981",
+          "processing_type": "advanced",
+          "timestamp": "2025-11-14T22:09:18.027034"
+        },
+        {
+          "changes_made": "The title color was changed from #000000 to #3b82f6 as requested.",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "Discover Our Latest Arrivals!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#000000",
+            "CTA_BG_COLOR": "#10b981",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Change the title color to #3b82f6",
+          "processing_type": "advanced",
+          "timestamp": "2025-11-14T22:09:22.947309"
+        },
+        {
+          "changes_made": "The title color was changed from #3b82f6 to #8b5cf6 as per the user's request.",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "Discover Our Latest Arrivals!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#3b82f6",
+            "CTA_BG_COLOR": "#10b981",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Change the title color to #8b5cf6",
+          "processing_type": "advanced",
+          "timestamp": "2025-11-14T22:09:24.661725"
+        },
+        {
+          "changes_made": "Increased the TITLE_FONT_SIZE from '28px' to '32px' to make the title more prominent.",
+          "previous_config": {
+            "HERO_ALT_TEXT": "Campaign Hero Image",
+            "MAIN_TITLE": "Discover Our Latest Arrivals!",
+            "HERO_LINK": "#",
+            "TITLE_FONT_SIZE": "28px",
+            "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+            "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+            "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+            "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+            "CTA_LINK": "#",
+            "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+            "CAMPAIGN_TITLE": "New Collection Available!",
+            "COMPANY_NAME": "R and R Imports, Inc",
+            "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+            "CTA_TEXT_COLOR": "#000000",
+            "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+            "GREETING_TEXT": "Hi there,",
+            "TITLE_COLOR": "#8b5cf6",
+            "CTA_BG_COLOR": "#10b981",
+            "PRODUCTS_TITLE": "Featured Collection",
+            "CTA_TEXT": "Shop Collection"
+          },
+          "user_request": "Try \"Make the title more prominent\"",
+          "processing_type": "advanced",
+          "timestamp": "2025-11-14T22:12:05.638447"
+        }
+      ],
+      "campaign_id": "264cd31e-f686-4be7-817f-d9bad80eaa4a",
+      "last_modified": "2025-11-14T22:12:05.638468",
+      "ai_chat_history": [
+        {
+          "content": "increase the size of the logo",
+          "role": "user",
+          "timestamp": "2025-11-14T22:13:06.070260"
+        },
+        {
+          "content": "Increasing the size of your company logo in the header is a great way to make your brand more prominent! Here are a few things you can do:\n\n1. **Adjust the Dimensions**: If you're able to customize the code or the template settings, look for the section that specifies the logo size and increase the width and height values. A good starting point is to increase by about 20-30% and see how it looks.\n\n2. **Ensure Quality**: Make sure the image file you're using for your logo is high-resolution. This will prevent it from looking pixelated when enlarged.\n\n3. **Balance with Other Elements**: As you increase the logo size, ensure it doesn't overwhelm other components in the header, like navigation links, if any. Keep some breathing space around the logo to maintain a clean and professional look.\n\nOnce you've made these adjustments, preview the email on different devices to ensure it looks great everywhere. Let me know if you need help with the technical steps!",
+          "role": "assistant",
+          "timestamp": "2025-11-14T22:13:12.348838"
+        }
+      ],
+      "template_config": {
+        "HERO_ALT_TEXT": "Campaign Hero Image",
+        "MAIN_TITLE": "Discover Our Latest Arrivals!",
+        "HERO_LINK": "#",
+        "TITLE_FONT_SIZE": "32px",
+        "HERO_IMAGE_URL": "https://via.placeholder.com/600x300?text=Hero+Image",
+        "PRODUCTS_HTML": "<!-- Products will be dynamically inserted here -->",
+        "COMPANY_LOGO_URL": "https://mcusercontent.com/8351ab2884b2416977322fb0e/images/4f7399b3-f8f9-8d7f-9b1e-4dd0ed5690cb.png",
+        "DESCRIPTION_TEXT": "Check out our latest collection selected just for you!",
+        "CTA_LINK": "#",
+        "COMPANY_ADDRESS": "5271 Lee Hwy, Troutville, VA 24175-7555 USA",
+        "CAMPAIGN_TITLE": "New Collection Available!",
+        "COMPANY_NAME": "R and R Imports, Inc",
+        "PRODUCTS_SUBTITLE": "We've selected these exclusive items just for you!",
+        "CTA_TEXT_COLOR": "#000000",
+        "UNSUBSCRIBE_URL": "https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html",
+        "GREETING_TEXT": "Hi there,",
+        "TITLE_COLOR": "#8b5cf6",
+        "CTA_BG_COLOR": "#10b981",
+        "PRODUCTS_TITLE": "Featured Collection",
+        "CTA_TEXT": "Shop Collection"
+      }
+    },
+    {
+      "template_html": "<!DOCTYPE html>\n<html>\n<head><title>{{CAMPAIGN_TITLE}}</title></head>\n<body>\n<center>\n<table width=\"600\" style=\"background-color: #f4f4f4;\">\n<tr><td style=\"padding: 20px;\">\n<h1 style=\"color: {{TITLE_COLOR}};\">{{MAIN_TITLE}}</h1>\n<p>{{GREETING_TEXT}}</p>\n<p>{{DESCRIPTION_TEXT}}</p>\n<div>{{PRODUCTS_HTML}}</div>\n<a href=\"{{CTA_LINK}}\" style=\"background-color: {{CTA_BG_COLOR}}; color: {{CTA_TEXT_COLOR}}; padding: 12px 24px; text-decoration: none;\">{{CTA_TEXT}}</a>\n</td></tr>\n</table>\n</center>\n</body>\n</html>",
+      "created_at": "2025-11-14T20:28:01.672870",
+      "version_history": [],
+      "campaign_id": "sample_20251114_202801",
+      "last_modified": "2025-11-14T20:28:01.672865",
+      "template_config": {
+        "CAMPAIGN_TITLE": "Sample Campaign",
+        "CTA_TEXT_COLOR": "#ffffff",
+        "MAIN_TITLE": "Welcome to Our Collection",
+        "GREETING_TEXT": "Hi there,",
+        "TITLE_COLOR": "#000000",
+        "CTA_BG_COLOR": "#007bff",
+        "PRODUCTS_HTML": "<!-- Products will be inserted here -->",
+        "DESCRIPTION_TEXT": "Check out our amazing products!",
+        "CTA_LINK": "#",
+        "CTA_TEXT": "Shop Now"
+      },
+      "ai_chat_history": []
+    }
+  ],
+  "usage_notes": {
+    "description": "DynamoDB table: campaign_template_instances",
+    "access_patterns": "Review sample records to understand query patterns and attribute structure.",
+    "notes": [
+      "Sample records show real data fields",
+      "Attributes include key schema + strongly typed fields",
+      "Use partition key for direct lookups",
+      "Billing mode affects read/write cost",
+      "This JSON helps engineers understand the data model instantly"
+    ]
+  }
+}

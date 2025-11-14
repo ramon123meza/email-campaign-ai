@@ -1,0 +1,74 @@
+{
+  "generated_at": "2025-11-14T22:28:18.638307+00:00",
+  "aws_region": "us-east-1",
+  "table_metadata": {
+    "table_name": "campaign_templates",
+    "table_status": "ACTIVE",
+    "creation_date": "2025-11-10T11:09:34.219000-05:00",
+    "item_count": 0,
+    "table_size_bytes": 0,
+    "table_size_mb": 0.0,
+    "billing_mode": "PAY_PER_REQUEST"
+  },
+  "schema": {
+    "key_schema": [
+      {
+        "attribute_name": "template_id",
+        "key_type": "Partition Key"
+      }
+    ],
+    "attributes": {
+      "campaign_id": {
+        "type": "S",
+        "is_key": false,
+        "key_type": null
+      },
+      "template_id": {
+        "type": "S",
+        "is_key": true,
+        "key_type": "Partition Key"
+      }
+    },
+    "global_secondary_indexes": [
+      {
+        "IndexName": "CampaignIndex",
+        "KeySchema": [
+          {
+            "AttributeName": "campaign_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "IndexStatus": "ACTIVE",
+        "ProvisionedThroughput": {
+          "NumberOfDecreasesToday": 0,
+          "ReadCapacityUnits": 0,
+          "WriteCapacityUnits": 0
+        },
+        "IndexSizeBytes": 0,
+        "ItemCount": 0,
+        "IndexArn": "arn:aws:dynamodb:us-east-1:473924927922:table/campaign_templates/index/CampaignIndex",
+        "WarmThroughput": {
+          "ReadUnitsPerSecond": 12000,
+          "WriteUnitsPerSecond": 4000,
+          "Status": "ACTIVE"
+        }
+      }
+    ],
+    "local_secondary_indexes": null
+  },
+  "sample_records": [],
+  "usage_notes": {
+    "description": "DynamoDB table: campaign_templates",
+    "access_patterns": "Review sample records to understand query patterns and attribute structure.",
+    "notes": [
+      "Sample records show real data fields",
+      "Attributes include key schema + strongly typed fields",
+      "Use partition key for direct lookups",
+      "Billing mode affects read/write cost",
+      "This JSON helps engineers understand the data model instantly"
+    ]
+  }
+}

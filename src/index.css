@@ -1,0 +1,464 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Modern Color Palette with Beautiful Gradients */
+:root {
+  /* Primary Gradient - Vibrant Purple to Pink */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #5568d3 0%, #68408c 100%);
+
+  /* Secondary Gradient - Ocean Blue to Cyan */
+  --gradient-secondary: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-secondary-hover: linear-gradient(135deg, #3a96e5 0%, #00d9e5 100%);
+
+  /* Success Gradient - Fresh Green to Lime */
+  --gradient-success: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  --gradient-success-hover: linear-gradient(135deg, #3ad46c 0%, #2fe0c8 100%);
+
+  /* Warning Gradient - Warm Orange to Coral */
+  --gradient-warning: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  --gradient-warning-hover: linear-gradient(135deg, #e8618a 0%, #e5d038 100%);
+
+  /* Danger Gradient - Bold Red to Pink */
+  --gradient-danger: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-danger-hover: linear-gradient(135deg, #dc84e3 0%, #dc4c5e 100%);
+
+  /* Background Gradient - Soft and Subtle */
+  --gradient-background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  --gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.8) 100%);
+
+  /* AI Assistant Gradient - Tech Purple to Blue */
+  --gradient-ai: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  --gradient-ai-active: linear-gradient(135deg, #96dbd9 0%, #ecc5d2 100%);
+
+  /* Canvas Gradient - Creative Vibes */
+  --gradient-canvas: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%);
+
+  /* Hover effects */
+  --shadow-primary: 0 10px 40px -10px rgba(102, 126, 234, 0.6);
+  --shadow-secondary: 0 10px 40px -10px rgba(79, 172, 254, 0.6);
+  --shadow-success: 0 10px 40px -10px rgba(67, 233, 123, 0.6);
+  --shadow-glow: 0 0 30px rgba(102, 126, 234, 0.3);
+}
+
+@layer base {
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    background: var(--gradient-background);
+    @apply text-gray-800;
+  }
+}
+
+@layer components {
+  /* Modern Gradient Buttons */
+  .btn-primary {
+    background: var(--gradient-primary);
+    @apply text-white font-medium py-2.5 px-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 border-0;
+  }
+
+  .btn-primary:hover {
+    background: var(--gradient-primary-hover);
+    box-shadow: var(--shadow-primary);
+  }
+
+  .btn-secondary {
+    background: var(--gradient-secondary);
+    @apply text-white font-medium py-2.5 px-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 border-0;
+  }
+
+  .btn-secondary:hover {
+    background: var(--gradient-secondary-hover);
+    box-shadow: var(--shadow-secondary);
+  }
+
+  .btn-success {
+    background: var(--gradient-success);
+    @apply text-white font-medium py-2.5 px-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 border-0;
+  }
+
+  .btn-success:hover {
+    background: var(--gradient-success-hover);
+    box-shadow: var(--shadow-success);
+  }
+
+  .btn-danger {
+    background: var(--gradient-danger);
+    @apply text-white font-medium py-2.5 px-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 border-0;
+  }
+
+  .btn-danger:hover {
+    background: var(--gradient-danger-hover);
+  }
+
+  .btn-ai {
+    background: var(--gradient-ai);
+    @apply text-gray-800 font-medium py-2.5 px-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 border-0;
+  }
+
+  .btn-ai:hover {
+    background: var(--gradient-ai-active);
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Glass Morphism Cards */
+  .card {
+    background: var(--gradient-glass);
+    backdrop-filter: blur(10px);
+    @apply rounded-2xl shadow-xl border border-white/20 transition-all duration-300 hover:shadow-2xl;
+  }
+
+  .card-gradient {
+    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.85) 100%);
+    backdrop-filter: blur(20px);
+    @apply rounded-2xl shadow-2xl border border-white/30;
+  }
+
+  /* Modern Input Fields */
+  .input {
+    @apply w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none transition-all duration-200 bg-white/80 backdrop-blur-sm;
+  }
+
+  .input:focus {
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  }
+
+  .label {
+    @apply block text-sm font-semibold text-gray-700 mb-2;
+  }
+
+  /* Gradient Text */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-ai {
+    background: linear-gradient(135deg, #667eea 0%, #00f2fe 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Loading animation */
+.loading-spinner {
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Drag and drop styles */
+.drag-over {
+  @apply border-blue-500 bg-blue-50;
+}
+
+.drag-preview {
+  @apply opacity-50;
+}
+
+/* Progress bar with gradient */
+.progress-bar {
+  @apply bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner;
+}
+
+.progress-fill {
+  background: var(--gradient-primary);
+  @apply h-full transition-all duration-300 ease-out shadow-lg;
+}
+
+/* AI Chat Assistant Styles */
+.ai-chat-container {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(20px);
+  @apply fixed bottom-6 right-6 w-96 h-[500px] rounded-3xl shadow-2xl border border-white/30 z-50 flex flex-col overflow-hidden;
+  animation: slideUp 0.3s ease-out;
+}
+
+.ai-chat-header {
+  background: var(--gradient-ai);
+  @apply px-6 py-4 flex items-center justify-between border-b border-white/20;
+}
+
+.ai-chat-messages {
+  @apply flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar;
+}
+
+.ai-message {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  @apply p-4 rounded-2xl shadow-sm max-w-[85%];
+}
+
+.user-message {
+  background: var(--gradient-primary);
+  @apply p-4 rounded-2xl shadow-md text-white max-w-[85%] ml-auto;
+}
+
+.ai-chat-input {
+  @apply border-t border-white/20 p-4 bg-white/50 backdrop-blur-sm;
+}
+
+/* Canvas Editor Styles */
+.canvas-editor {
+  @apply min-h-screen flex flex-col bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50;
+}
+
+.canvas-toolbar {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(20px);
+  @apply sticky top-0 z-40 border-b border-white/30 shadow-lg;
+}
+
+.canvas-workspace {
+  @apply flex-1 flex gap-6 p-6;
+}
+
+.canvas-sidebar {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(20px);
+  @apply w-80 rounded-2xl p-6 shadow-xl border border-white/20 overflow-y-auto custom-scrollbar;
+}
+
+.canvas-preview {
+  @apply flex-1 flex flex-col items-center justify-start;
+}
+
+.email-preview-container {
+  background: white;
+  @apply max-w-3xl w-full rounded-2xl shadow-2xl border border-gray-200 overflow-hidden;
+}
+
+.component-palette-item {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(10px);
+  @apply p-4 rounded-xl border border-white/30 cursor-move hover:shadow-lg transition-all duration-200 hover:-translate-y-1;
+}
+
+.component-palette-item:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+/* Editable Component Styles */
+.editable-component {
+  @apply relative transition-all duration-200;
+}
+
+.editable-component:hover {
+  @apply ring-2 ring-purple-400 ring-opacity-50;
+}
+
+.component-edit-overlay {
+  @apply absolute inset-0 bg-purple-500 bg-opacity-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center;
+}
+
+.component-edit-button {
+  background: var(--gradient-primary);
+  @apply px-4 py-2 rounded-lg text-white text-sm shadow-lg transform scale-0 group-hover:scale-100 transition-transform duration-200;
+}
+
+/* Version History Sidebar */
+.version-history {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(20px);
+  @apply w-80 rounded-2xl p-6 shadow-xl border border-white/20;
+}
+
+.version-item {
+  @apply p-4 rounded-xl border border-gray-200 cursor-pointer hover:shadow-md transition-all duration-200 bg-white/80 backdrop-blur-sm;
+}
+
+.version-item:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  @apply border-purple-300;
+}
+
+.version-item.active {
+  background: var(--gradient-primary);
+  @apply text-white border-transparent shadow-lg;
+}
+
+/* Safety Modal Styles */
+.safety-modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-6;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.safety-modal {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(30px);
+  @apply max-w-2xl w-full rounded-3xl shadow-2xl border border-white/30 overflow-hidden;
+  animation: slideUp 0.3s ease-out;
+}
+
+.safety-modal-header {
+  background: var(--gradient-warning);
+  @apply px-8 py-6 border-b border-white/20;
+}
+
+.safety-checklist-item {
+  @apply flex items-center gap-4 p-4 rounded-xl border border-gray-200 bg-white/80 backdrop-blur-sm hover:shadow-md transition-all duration-200;
+}
+
+.safety-checklist-item.completed {
+  background: linear-gradient(135deg, rgba(67, 233, 123, 0.1) 0%, rgba(56, 249, 215, 0.1) 100%);
+  @apply border-green-300;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.shimmer {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.8) 50%, transparent 100%);
+  background-size: 1000px 100%;
+}
+
+/* Badge Styles */
+.badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium shadow-sm;
+}
+
+.badge-primary {
+  background: var(--gradient-primary);
+  @apply text-white;
+}
+
+.badge-success {
+  background: var(--gradient-success);
+  @apply text-white;
+}
+
+.badge-warning {
+  background: var(--gradient-warning);
+  @apply text-white;
+}
+
+.badge-danger {
+  background: var(--gradient-danger);
+  @apply text-white;
+}
+
+.badge-ai {
+  background: var(--gradient-ai);
+  @apply text-gray-800;
+}
+
+/* Tooltip Styles */
+.tooltip {
+  @apply absolute z-50 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity duration-200;
+}
+
+.tooltip.show {
+  @apply opacity-100;
+}
+
+/* Loading States */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  @apply rounded-lg;
+}
+
+/* Floating Action Button */
+.fab {
+  background: var(--gradient-primary);
+  @apply fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-white cursor-pointer z-40 transition-all duration-300;
+}
+
+.fab:hover {
+  @apply transform scale-110;
+  box-shadow: var(--shadow-primary);
+}
+
+/* Preview Toggle */
+.preview-toggle {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(10px);
+  @apply inline-flex rounded-xl p-1 shadow-lg border border-white/30;
+}
+
+.preview-toggle-btn {
+  @apply px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium;
+}
+
+.preview-toggle-btn.active {
+  background: var(--gradient-primary);
+  @apply text-white shadow-md;
+}
+
+.preview-toggle-btn:not(.active) {
+  @apply text-gray-600 hover:bg-white/50;
+}
