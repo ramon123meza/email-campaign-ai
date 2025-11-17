@@ -1402,8 +1402,9 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
 
         # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
         # but SKIP fields that need per-recipient personalization
+        # IMPORTANT: We skip DESCRIPTION_TEXT because it should be personalized per recipient
         for key, value in template_config.items():
-            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE']:  # Skip - we'll personalize these
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'DESCRIPTION_TEXT']:  # Skip - we'll personalize these
                 placeholder = '{{' + key + '}}'
                 personalized_html = personalized_html.replace(placeholder, str(value))
 
@@ -1419,6 +1420,8 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
         # Step 3: Get school/team information for dynamic subject
         school_code = recipient.get('school_code', '')
         team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        logger.info(f"Personalizing preview for school_code={school_code}, team_name={team_name}")
 
         # Update products title with school name (ALWAYS replace, even if no team_name)
         if team_name and team_name != school_code:
@@ -1436,6 +1439,19 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
         else:
             products_subtitle = template_config.get('PRODUCTS_SUBTITLE', 'We\'ve selected these exclusive items just for you!')
         personalized_html = personalized_html.replace('{{PRODUCTS_SUBTITLE}}', products_subtitle)
+
+        # Step 3b: Personalize DESCRIPTION_TEXT for this recipient's school ONLY
+        # CRITICAL: Each recipient sees ONLY their school, not multiple schools
+        if team_name and team_name != school_code:
+            # Use full school name
+            description = f"Discover exclusive {team_name} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        elif school_code:
+            # Fallback to school code if name lookup failed
+            description = f"Discover exclusive {school_code} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        else:
+            # Generic fallback
+            description = template_config.get('DESCRIPTION_TEXT', 'Discover something special just for you!')
+        personalized_html = personalized_html.replace('{{DESCRIPTION_TEXT}}', description)
 
         # Step 4: Generate recipient-specific products HTML
         product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
