@@ -538,40 +538,56 @@ function CampaignEditor() {
                 <>
                   {/* Test User Selector Dropdown */}
                   {templateInstance?.test_user_info && (
-                    <div className="mb-4 p-4 bg-accent-blue/10 border border-accent-blue/30 rounded-lg">
+                    <div className="mb-4 p-4 bg-gradient-to-r from-accent-blue/10 to-accent-purple/10 border border-accent-blue/30 rounded-lg shadow-md">
                       <div className="flex items-center space-x-4">
-                        <Eye className="w-5 h-5 text-accent-blue flex-shrink-0" />
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <Eye className="w-5 h-5 text-accent-blue" />
+                          <span className="text-sm font-medium text-primary">Preview as:</span>
+                        </div>
 
-                        <div className="flex-1">
-                          <label className="block text-xs text-muted mb-1">
-                            Preview as Test User:
-                          </label>
+                        <div className="flex-1 max-w-md">
                           <select
                             value={selectedTestUserEmail || templateInstance.test_user_info.email}
                             onChange={(e) => setSelectedTestUserEmail(e.target.value || null)}
-                            className="w-full bg-dark-secondary text-primary border border-dark-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                            className="w-full bg-dark-primary text-white border-2 border-accent-blue/40 rounded-lg px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-accent-blue transition-all hover:border-accent-blue/60 cursor-pointer"
+                            style={{
+                              appearance: 'none',
+                              backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236366f1' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                              backgroundPosition: 'right 0.5rem center',
+                              backgroundRepeat: 'no-repeat',
+                              backgroundSize: '1.5em 1.5em',
+                              paddingRight: '2.5rem',
+                            }}
                           >
                             {testUsers?.test_users?.filter(u => u.active).map(user => (
-                              <option key={user.email} value={user.email}>
+                              <option
+                                key={user.email}
+                                value={user.email}
+                                style={{
+                                  backgroundColor: '#1a1b26',
+                                  color: '#ffffff',
+                                  padding: '8px'
+                                }}
+                              >
                                 {user.name} ({user.school_code}) - {user.email}
                               </option>
                             ))}
                           </select>
                         </div>
 
-                        <div className="text-right">
-                          <div className="text-sm text-primary font-medium">
+                        <div className="flex-shrink-0 bg-dark-secondary/50 rounded-lg px-4 py-2 border border-accent-blue/20">
+                          <div className="text-sm text-accent-blue font-semibold">
                             {templateInstance.test_user_info.school_name || templateInstance.test_user_info.school_code}
                           </div>
-                          <div className="text-xs text-muted">
-                            School: {templateInstance.test_user_info.school_code}
+                          <div className="text-xs text-muted mt-0.5">
+                            Code: {templateInstance.test_user_info.school_code}
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-muted flex items-center space-x-2">
-                        <TestTube className="w-3 h-3" />
+                      <div className="mt-3 pt-3 border-t border-accent-blue/20 text-xs text-muted flex items-center space-x-2">
+                        <TestTube className="w-4 h-4 text-accent-purple" />
                         <span>
-                          This preview shows EXACTLY what <strong className="text-primary">{templateInstance.test_user_info.name}</strong> will receive in test emails with their products
+                          This preview shows <strong className="text-accent-blue">{templateInstance.test_user_info.name}</strong>'s personalized email with their {templateInstance.test_user_info.school_code} products
                         </span>
                       </div>
                     </div>
