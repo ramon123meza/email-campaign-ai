@@ -131,6 +131,153 @@ def call_openai_api(messages, max_tokens=2000, temperature=0.7):
         logger.error(f"Error calling OpenAI API: {str(e)}")
         raise
 
+def generate_campaign_content_from_products(product_titles, campaign_id):
+    """
+    Analyze products and generate AI campaign content that uses placeholders
+
+    CRITICAL: AI must use placeholders like {{TEAM_NAME}} instead of actual school names
+    so that content can be personalized per recipient at send time.
+    """
+    try:
+        if not OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY not set - skipping AI content generation")
+            return None
+
+        # Create product list for AI
+        products_text = "\n".join([f"- {title}" for title in product_titles[:10]])
+
+        system_prompt = """You are an expert email marketing copywriter for R and R Imports, Inc., a company that sells NCAA college merchandise.
+
+CRITICAL RULES:
+1. You are creating ONE template that will be personalized for MANY different schools
+2. NEVER mention specific school names (like "Akron Zips", "Alabama", "BGU", "AKN", etc.)
+3. ALWAYS use placeholders for school-specific content
+4. The template will be personalized at send time with each recipient's school
+
+AVAILABLE PLACEHOLDERS (you MUST use these):
+- {{TEAM_NAME}} - Will be replaced with the recipient's school name (e.g., "Akron Zips")
+- {{SCHOOL_PAGE}} - Will be replaced with the recipient's school store URL
+- {{GREETING_TEXT}} - Will be replaced with personalized greeting
+- {{PRODUCTS_HTML}} - Will be replaced with recipient's products
+
+GOOD EXAMPLES:
+✅ "Celebrate your {{TEAM_NAME}} pride with style!"
+✅ "Show your {{TEAM_NAME}} spirit wherever you go"
+✅ "Perfect for {{TEAM_NAME}} fans who want to stand out"
+✅ "Rep your team with {{TEAM_NAME}} gear"
+
+BAD EXAMPLES (NEVER do this):
+❌ "Featuring schools like BGU, ALS, and AKN"
+❌ "Perfect for Akron Zips fans"
+❌ "Alabama, Ohio State, and Michigan fans will love this"
+❌ "Show your college pride" (too generic - mention {{TEAM_NAME}} instead)
+
+Your task: Analyze the products and create engaging email content that uses placeholders appropriately."""
+
+        user_message = f"""Products in this campaign:
+{products_text}
+
+Generate compelling email content for this collection. Return ONLY valid JSON with this structure:
+{{
+  "main_title": "Campaign headline (use placeholders if mentioning teams)",
+  "description": "Main description paragraph (MUST use {{{{TEAM_NAME}}}} placeholder, NOT specific schools)",
+  "products_title": "Products section title (use placeholders appropriately)",
+  "products_subtitle": "Products section subtitle (use placeholders appropriately)"
+}}
+
+Remember: Use {{{{TEAM_NAME}}}} placeholder, NOT actual school names!"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+        logger.info("Calling OpenAI API for product analysis...")
+        ai_response = call_openai_api(messages, max_tokens=500, temperature=0.7)
+        logger.info(f"AI Response: {ai_response}")
+
+        # Parse JSON response
+        try:
+            # Extract JSON from response (handle markdown code blocks)
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                ai_response = ai_response[json_start:json_end]
+
+            ai_content = json.loads(ai_response)
+
+            # Validate that content uses placeholders and doesn't mention specific schools
+            description = ai_content.get('description', '')
+            if '{{TEAM_NAME}}' not in description:
+                logger.warning("AI description doesn't use {{TEAM_NAME}} placeholder - fixing...")
+                # Fix common issues
+                for bad_phrase in ['colleges', 'schools like', 'universities like', 'teams']:
+                    if bad_phrase in description.lower():
+                        description = description.replace(bad_phrase, '{{TEAM_NAME}}')
+                        break
+                else:
+                    description = f"Celebrate your {{{{TEAM_NAME}}}} pride with {description}"
+                ai_content['description'] = description
+
+            # Update template instance with AI content
+            template_instances_table = dynamodb.Table('campaign_template_instances')
+            response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+            if 'Item' in response:
+                template_instance = response['Item']
+                template_config = template_instance.get('template_config', {})
+
+                # Update config with AI content (preserving placeholders)
+                template_config['MAIN_TITLE'] = ai_content.get('main_title', template_config.get('MAIN_TITLE', 'New Collection Available!'))
+                template_config['DESCRIPTION_TEXT'] = ai_content.get('description', template_config.get('DESCRIPTION_TEXT', 'Check out our latest collection!'))
+                template_config['PRODUCTS_TITLE'] = ai_content.get('products_title', template_config.get('PRODUCTS_TITLE', 'Featured Collection'))
+                template_config['PRODUCTS_SUBTITLE'] = ai_content.get('products_subtitle', template_config.get('PRODUCTS_SUBTITLE', 'Selected just for you!'))
+
+                # Get raw template with placeholders
+                standard_template = get_standard_email_template()
+
+                # Create two versions:
+                # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+                template_html_raw = standard_template
+
+                # 2. template_html - Render ONLY static placeholders for preview
+                # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+                runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
+                template_html = standard_template
+                for key, value in template_config.items():
+                    if key not in runtime_placeholders:
+                        template_html = template_html.replace('{{' + key + '}}', str(value))
+
+                # Update template instance
+                template_instances_table.update_item(
+                    Key={'campaign_id': campaign_id},
+                    UpdateExpression='SET template_config = :config, template_html = :html, template_html_raw = :raw, last_modified = :modified',
+                    ExpressionAttributeValues={
+                        ':config': template_config,
+                        ':html': template_html,
+                        ':raw': template_html_raw,
+                        ':modified': datetime.now().isoformat()
+                    }
+                )
+
+                logger.info(f"Updated template with AI-generated content for campaign {campaign_id}")
+                return ai_content
+            else:
+                logger.warning(f"Template instance not found for campaign {campaign_id}")
+                return None
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            logger.error(f"AI Response was: {ai_response}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error generating campaign content from products: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
 def cors_response(status_code, body):
     """Standard CORS response with Decimal handling"""
     return {
@@ -200,6 +347,8 @@ def lambda_handler(event, context):
             return get_campaign_template(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/template-instance'):
             return get_template_instance(event)
+        elif method == 'PUT' and path.startswith('/api/campaigns/') and path.endswith('/template-config'):
+            return update_template_config(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/create-template-instance'):
             return create_template_instance(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/versions'):
@@ -321,21 +470,30 @@ def create_campaign(event):
                 'UNSUBSCRIBE_URL': 'https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html'
             }
             
-            # Apply variables to template
+            # Create two versions:
+            # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+            template_html_raw = standard_template
+
+            # 2. template_html - Render ONLY static placeholders for preview
+            # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+            runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
             rendered_html = standard_template
             for key, value in template_vars.items():
-                rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
-            
+                if key not in runtime_placeholders:
+                    rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
+
             template_instance = {
                 'campaign_id': campaign_id,
-                'template_html': rendered_html,
+                'template_html': rendered_html,  # Preview version (static placeholders replaced)
+                'template_html_raw': template_html_raw,  # Raw version (all placeholders intact)
                 'template_config': template_vars,
                 'version_history': [],
                 'last_modified': datetime.now().isoformat(),
                 'ai_chat_history': [],
                 'created_at': datetime.now().isoformat()
             }
-            
+
             template_instances_table.put_item(Item=template_instance)
             
             # Update campaign to mark template instance created
@@ -697,11 +855,34 @@ def upload_products_file(event):
                 ':updated': datetime.now().isoformat()
             }
         )
-        
+
+        # ANALYZE PRODUCTS WITH AI to generate campaign content
+        try:
+            logger.info(f"Analyzing products with AI for campaign {campaign_id}...")
+
+            # Sample first 10 products for analysis
+            sample_products = df.head(10)
+            product_titles = sample_products['Title'].dropna().tolist()[:10]
+
+            # Generate campaign content with AI
+            ai_content = generate_campaign_content_from_products(product_titles, campaign_id)
+
+            if ai_content:
+                logger.info(f"AI generated campaign content successfully")
+            else:
+                logger.warning("AI content generation returned empty results")
+
+        except Exception as e:
+            logger.error(f"Error in AI product analysis: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Don't fail the upload if AI fails - just log the error
+
         return cors_response(200, {
             'message': 'File uploaded successfully',
             'records_count': len(df),
-            's3_key': s3_key
+            's3_key': s3_key,
+            'ai_analyzed': True
         })
         
     except Exception as e:
@@ -2477,6 +2658,79 @@ def get_template_instance(event):
         logger.error(f"Error getting template instance: {e}")
         return cors_response(500, {'error': str(e)})
 
+def update_template_config(event):
+    """Update template configuration and re-render preview with new values"""
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]  # /api/campaigns/{campaign_id}/template-config
+
+        body = event.get('body', {})
+        if isinstance(body, str):
+            body = json.loads(body)
+
+        new_config = body.get('template_config')
+        if not new_config:
+            return cors_response(400, {'error': 'Missing template_config in request body'})
+
+        # Get current template instance
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+        if 'Item' not in response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = response['Item']
+
+        # Update config
+        template_config = template_instance.get('template_config', {})
+        template_config.update(new_config)
+
+        # Get raw template
+        template_html_raw = template_instance.get('template_html_raw')
+        if not template_html_raw:
+            # If no raw template, get the standard template
+            template_html_raw = get_standard_email_template()
+
+        # Re-render template_html with updated config
+        # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+        runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
+        template_html = template_html_raw
+        for key, value in template_config.items():
+            if key not in runtime_placeholders:
+                template_html = template_html.replace('{{' + key + '}}', str(value))
+
+        # Update template instance in DynamoDB
+        template_instances_table.update_item(
+            Key={'campaign_id': campaign_id},
+            UpdateExpression='SET template_config = :config, template_html = :html, last_modified = :modified',
+            ExpressionAttributeValues={
+                ':config': template_config,
+                ':html': template_html,
+                ':modified': datetime.now().isoformat()
+            }
+        )
+
+        logger.info(f"Updated template config for campaign {campaign_id}")
+
+        return cors_response(200, {
+            'message': 'Template configuration updated successfully',
+            'template_config': template_config,
+            'template_html': template_html
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating template config: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
 def create_template_instance(event):
     """Create a new template instance for a campaign"""
     try:
@@ -2535,21 +2789,30 @@ def create_template_instance_for_campaign(campaign_id):
             'UNSUBSCRIBE_URL': 'https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html'
         }
         
-        # Apply variables to template
+        # Create two versions:
+        # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+        template_html_raw = standard_template
+
+        # 2. template_html - Render ONLY static placeholders for preview
+        # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+        runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
         rendered_html = standard_template
         for key, value in template_vars.items():
-            rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
-        
+            if key not in runtime_placeholders:
+                rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
+
         template_instance = {
             'campaign_id': campaign_id,
-            'template_html': rendered_html,
+            'template_html': rendered_html,  # Preview version (static placeholders replaced)
+            'template_html_raw': template_html_raw,  # Raw version (all placeholders intact)
             'template_config': template_vars,
             'version_history': [],
             'last_modified': datetime.now().isoformat(),
             'ai_chat_history': [],
             'created_at': datetime.now().isoformat()
         }
-        
+
         # Save template instance
         template_instances_table = dynamodb.Table('campaign_template_instances')
         template_instances_table.put_item(Item=template_instance)

@@ -179,7 +179,8 @@ export const campaignAPI = {
   // Template instances (AI Template service)
   getTemplateInstance: (campaignId) => aiTemplateApi.get(`/api/campaigns/${campaignId}/template-instance`),
   createTemplateInstance: (campaignId, data = {}) => aiTemplateApi.post(`/api/campaigns/${campaignId}/create-template-instance`, data),
-  
+  updateTemplateConfig: (campaignId, config) => campaignApi.put(`/api/campaigns/${campaignId}/template-config`, { template_config: config }),
+
   // AI Template Editor functions
   sendAIChat: (campaignId, message) => aiTemplateApi.post(`/api/campaigns/${campaignId}/ai-chat`, { message }),
   sendAIEdit: (campaignId, request) => aiTemplateApi.post(`/api/campaigns/${campaignId}/ai-edit`, request),

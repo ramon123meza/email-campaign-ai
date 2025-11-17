@@ -46,6 +46,7 @@ function CampaignEditor() {
 
   const canvasRef = useRef(null)
   const heroImageInputRef = useRef(null)
+  const saveTimeoutRef = useRef(null)
 
   // Fetch campaign data
   const { data: campaign, isLoading: campaignLoading, error: campaignError } = useQuery({
@@ -163,6 +164,20 @@ function CampaignEditor() {
     }
   })
 
+  // Template config update mutation (for settings changes)
+  const updateConfigMutation = useMutation({
+    mutationFn: (config) => campaignAPI.updateTemplateConfig(id, config),
+    onSuccess: (data) => {
+      // Immediately refetch to show updated preview
+      refetchTemplate()
+      refetchTestPreview()
+    },
+    onError: (error) => {
+      console.error('Error updating template config:', error)
+      toast.error('Failed to update template settings')
+    }
+  })
+
   useEffect(() => {
     if (templateData?.template_instance) {
       const instance = templateData.template_instance
@@ -239,6 +254,22 @@ function CampaignEditor() {
 
   const handleSendTest = () => {
     sendTestMutation.mutate(id)
+  }
+
+  // Debounced template config save (saves 500ms after last change)
+  const handleConfigChange = (newConfig) => {
+    // Update local state immediately for responsive UI
+    setTemplateInstance(prev => ({ ...prev, template_config: newConfig }))
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Set new timeout to save after 500ms of no changes
+    saveTimeoutRef.current = setTimeout(() => {
+      updateConfigMutation.mutate(newConfig)
+    }, 500)
   }
 
   const handleHeroImageUpload = (event) => {
@@ -578,7 +609,7 @@ function CampaignEditor() {
                         value={templateInstance?.template_config?.CTA_PRIMARY_TEXT || 'Shop the Collection'}
                         onChange={(e) => {
                           const newConfig = { ...templateInstance.template_config, CTA_PRIMARY_TEXT: e.target.value }
-                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                          handleConfigChange(newConfig)
                         }}
                         className="input-dark"
                       />
@@ -593,7 +624,7 @@ function CampaignEditor() {
                         value={templateInstance?.template_config?.CTA_PRIMARY_LINK || 'https://www.rrinconline.com'}
                         onChange={(e) => {
                           const newConfig = { ...templateInstance.template_config, CTA_PRIMARY_LINK: e.target.value }
-                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                          handleConfigChange(newConfig)
                         }}
                         className="input-dark"
                         placeholder="https://www.example.com"
@@ -609,7 +640,7 @@ function CampaignEditor() {
                         value={templateInstance?.template_config?.CTA_SECONDARY_TEXT || 'Shop Your Team\'s Collection'}
                         onChange={(e) => {
                           const newConfig = { ...templateInstance.template_config, CTA_SECONDARY_TEXT: e.target.value }
-                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                          handleConfigChange(newConfig)
                         }}
                         className="input-dark"
                       />
