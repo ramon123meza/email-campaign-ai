@@ -497,6 +497,66 @@ def analyze_campaign_products(campaign_id):
         logger.error(f"Error analyzing campaign products: {e}")
         return None
 
+def generate_sample_products_html_for_preview(sample_products):
+    """Generate sample products HTML for template preview in editor"""
+    if not sample_products or len(sample_products) == 0:
+        return '<!-- No products available for preview -->'
+
+    product_count = len(sample_products)
+
+    if product_count == 1:
+        # Single product layout
+        product = sample_products[0]
+        return f'''
+<td width="100%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="#" target="_blank">
+<img src="{product.get('image', '')}" alt="{product.get('name', 'Product')}" style="display:block;border:0;max-width:300px;max-height:300px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#333333;margin:0 0 5px 0;">{product.get('name', '')}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:20px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product.get('price', '0.00')}</p>
+<a href="#" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+    else:
+        # Multiple products layout (2-column grid)
+        products_per_row = 2
+        width_percent = 50
+
+        products_html = ''
+        for i, product in enumerate(sample_products[:4]):  # Max 4 products
+            product_image = product.get('image', '')
+            product_name = product.get('name', '')
+            product_price = product.get('price', '0.00')
+
+            if product_image:
+                products_html += f'''
+<td width="{width_percent}%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="#" target="_blank">
+<img src="{product_image}" alt="{product_name}" style="display:block;border:0;max-width:250px;max-height:250px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:14px;color:#333333;margin:0 0 5px 0;">{product_name}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:18px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product_price}</p>
+<a href="#" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:8px 16px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:12px;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+                # Start new row after 2 products
+                if (i + 1) % 2 == 0 and (i + 1) < len(sample_products[:4]):
+                    products_html += "</tr><tr>"
+
+        return products_html
+
 def generate_ai_campaign_metadata(campaign_analysis):
     """Use AI to generate compelling campaign metadata based on products"""
     try:
@@ -512,11 +572,13 @@ GUIDELINES:
 - Keep descriptions concise but compelling (2-3 sentences max)
 - Make CTAs clear and action-driven
 - Reference specific product types when possible
+- Create personalized, enthusiastic greetings
 
 OUTPUT FORMAT (JSON):
 {
   "campaign_title": "Email subject line (max 60 chars)",
   "main_title": "Bold headline for email body (max 50 chars)",
+  "greeting": "Personalized greeting text (e.g., 'Hi there! We found something perfect for you.')",
   "description": "2-3 sentence description highlighting the products",
   "cta_text": "Call-to-action button text (max 25 chars)",
   "products_title": "Products section headline",
@@ -587,6 +649,13 @@ def handle_create_template_instance(event):
         if campaign_analysis:
             logger.info(f"Campaign analysis: {campaign_analysis.get('total_products', 0)} products, {campaign_analysis.get('total_schools', 0)} schools")
 
+            # Generate sample products HTML for preview
+            sample_products = campaign_analysis.get('sample_products', [])
+            if sample_products:
+                sample_products_html = generate_sample_products_html_for_preview(sample_products)
+                template_config['PRODUCTS_HTML'] = sample_products_html
+                logger.info(f"Generated sample products HTML for {len(sample_products)} products")
+
             # Generate AI-powered metadata
             ai_metadata = generate_ai_campaign_metadata(campaign_analysis)
 
@@ -595,6 +664,7 @@ def handle_create_template_instance(event):
                 template_config.update({
                     'CAMPAIGN_TITLE': ai_metadata.get('campaign_title', template_config['CAMPAIGN_TITLE']),
                     'MAIN_TITLE': ai_metadata.get('main_title', template_config['MAIN_TITLE']),
+                    'GREETING_TEXT': ai_metadata.get('greeting', template_config['GREETING_TEXT']),
                     'DESCRIPTION_TEXT': ai_metadata.get('description', template_config['DESCRIPTION_TEXT']),
                     'CTA_TEXT': ai_metadata.get('cta_text', template_config['CTA_TEXT']),
                     'PRODUCTS_TITLE': ai_metadata.get('products_title', template_config['PRODUCTS_TITLE']),

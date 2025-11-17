@@ -17,7 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   Sparkles,
-  Edit
+  Edit,
+  X
 } from 'lucide-react'
 import { campaignAPI, emailAPI, errorUtils } from '../utils/api'
 
