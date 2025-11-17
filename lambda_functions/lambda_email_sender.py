@@ -598,7 +598,10 @@ def get_products_for_test_user(campaign_id, school_code):
         schools_to_try = [school_code] if school_code else []
         schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
 
+        logger.info(f"TEST USER: Searching for products - Preferred school: {school_code}, Will try in order: {schools_to_try[:5]}...")
+
         for try_school in schools_to_try:
+            logger.info(f"TEST USER: Trying school: {try_school}")
             # Query campaign_data for this school
             response = campaign_data_table.query(
                 KeyConditionExpression=Key('campaign_id').eq(campaign_id),
@@ -608,21 +611,32 @@ def get_products_for_test_user(campaign_id, school_code):
 
             items = response.get('Items', [])
             if items:
-                logger.info(f"Found products for school {try_school} (preferred: {school_code})")
+                logger.info(f"TEST USER: ✓ SUCCESS: Found products for school {try_school} (preferred was: {school_code})")
                 recipient = items[0]
 
-                # Get school information
+                # Get school information from college-db-email
+                # IMPORTANT: Must use scan() since school_code is an attribute, not partition key
                 try:
-                    school_response = college_db_table.get_item(Key={'school_code': try_school})
-                    if 'Item' in school_response:
-                        school_info = school_response['Item']
+                    school_response = college_db_table.scan(
+                        FilterExpression=Attr('school_code').eq(try_school),
+                        Limit=1
+                    )
+                    school_items = school_response.get('Items', [])
+                    if school_items:
+                        school_info = school_items[0]
                         recipient['school_name'] = school_info.get('school_name', try_school)
                         recipient['school_logo'] = school_info.get('school_logo', '')
                         recipient['school_page'] = school_info.get('school_page', '')
+                        logger.info(f"TEST USER: School info for {try_school}: {recipient['school_name']}")
+                    else:
+                        logger.warning(f"TEST USER: No school info found in college-db-email for {try_school}")
+                        recipient['school_name'] = try_school
                 except Exception as e:
-                    logger.error(f"Error getting school info for {try_school}: {e}")
+                    logger.error(f"TEST USER: Error getting school info for {try_school}: {e}")
 
                 return recipient
+            else:
+                logger.info(f"TEST USER: No products found for {try_school}, trying next...")
 
         logger.warning(f"No products found for school {school_code} or any fallback schools")
         return None

@@ -80,16 +80,16 @@ function CampaignEditor() {
   const aiChatMutation = useMutation({
     mutationFn: (message) => campaignAPI.sendAIChat(id, message),
     onSuccess: (response, userMessage) => {
-      setChatHistory(prev => [...prev, 
+      setChatHistory(prev => [...prev,
         { role: 'user', content: userMessage, timestamp: new Date() },
         { role: 'assistant', content: response.response, timestamp: new Date() }
       ])
       setIsAIProcessing(false)
-      
+
       // If the AI made template changes, refresh the template and test preview
       if (response.template_updated) {
-        refetchTemplate()
-        refetchTestPreview()
+        queryClient.invalidateQueries(['template-instance', id])
+        queryClient.invalidateQueries(['test-preview', id, selectedTestUserEmail])
         toast.success('Template updated successfully!')
       }
     },
@@ -105,8 +105,8 @@ function CampaignEditor() {
     onSuccess: (response) => {
       if (response.success) {
         toast.success(response.message || 'Template updated successfully!')
-        refetchTemplate()
-        refetchTestPreview()
+        queryClient.invalidateQueries(['template-instance', id])
+        queryClient.invalidateQueries(['test-preview', id, selectedTestUserEmail])
 
         // Add to chat history
         setChatHistory(prev => [...prev,
@@ -143,14 +143,22 @@ function CampaignEditor() {
       setTestEmailsStatus('sending')
     },
     onSuccess: (data) => {
+      console.log('Test email response:', data)
       setTestEmailsStatus('success')
-      toast.success('Test emails sent successfully!')
+      toast.success(`Test emails sent successfully! ${data?.message || ''}`)
       setTimeout(() => setTestEmailsStatus(null), 3000)
     },
     onError: (error) => {
       console.error('Error sending test emails:', error)
-      setTestEmailsStatus('error')
-      toast.error('Failed to send test emails')
+      console.error('Error details:', error.response)
+      // Check if emails were actually sent despite the "error"
+      if (error.message?.includes('sent') || error.response?.data?.message?.includes('sent')) {
+        setTestEmailsStatus('success')
+        toast.success('Test emails sent successfully!')
+      } else {
+        setTestEmailsStatus('error')
+        toast.error(`Failed to send test emails: ${error.message}`)
+      }
       setTimeout(() => setTestEmailsStatus(null), 3000)
     }
   })
@@ -160,8 +168,9 @@ function CampaignEditor() {
     mutationFn: (imageData) => campaignAPI.uploadHeroImage(id, imageData),
     onSuccess: (data) => {
       toast.success('Hero image uploaded successfully!')
-      refetchTemplate()
-      refetchTestPreview()
+      // Force immediate refetch of both template and preview
+      queryClient.invalidateQueries(['template-instance', id])
+      queryClient.invalidateQueries(['test-preview', id, selectedTestUserEmail])
       setUploadingHero(false)
     },
     onError: (error) => {
@@ -175,9 +184,10 @@ function CampaignEditor() {
   const updateConfigMutation = useMutation({
     mutationFn: (config) => campaignAPI.updateTemplateConfig(id, config),
     onSuccess: (data) => {
+      console.log('Config updated, refetching preview...')
       // Immediately refetch to show updated preview
-      refetchTemplate()
-      refetchTestPreview()
+      queryClient.invalidateQueries(['template-instance', id])
+      queryClient.invalidateQueries(['test-preview', id, selectedTestUserEmail])
     },
     onError: (error) => {
       console.error('Error updating template config:', error)
