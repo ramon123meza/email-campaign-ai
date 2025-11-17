@@ -680,14 +680,20 @@ def handle_create_template_instance(event):
         if 'template_config' in body:
             template_config.update(body['template_config'])
 
-        # Apply config to template
-        rendered_html = apply_template_config(template_html, template_config)
+        # For editor preview: Apply config to template (including sample products)
+        # But keep original template with placeholders for per-recipient personalization
+        editor_preview_html = apply_template_config(template_html, template_config)
+
+        # IMPORTANT: Store raw template for per-recipient personalization
+        # We need to keep placeholders like {{PRODUCTS_HTML}}, {{GREETING_TEXT}}, etc.
+        # so we can replace them with recipient-specific data at send time
 
         # Create template instance
         template_instances_table = dynamodb.Table('campaign_template_instances')
         template_instance = {
             'campaign_id': campaign_id,
-            'template_html': rendered_html,
+            'template_html_raw': template_html,  # Raw template with {{PLACEHOLDERS}}
+            'template_html': editor_preview_html,  # Preview for editor (with sample products)
             'template_config': template_config,
             'version_history': [],
             'last_modified': datetime.now().isoformat(),
@@ -803,12 +809,16 @@ def handle_ai_edit_template(event):
         if len(version_history) > 50:
             version_history = version_history[-50:]
         
-        # Update template instance
+        # Get raw template (with placeholders)
+        raw_template = get_standard_email_template()
+
+        # Update template instance - store both raw and rendered versions
         template_instances_table.update_item(
             Key={'campaign_id': campaign_id},
-            UpdateExpression='SET template_html = :html, template_config = :config, version_history = :history, last_modified = :modified',
+            UpdateExpression='SET template_html = :html, template_html_raw = :raw, template_config = :config, version_history = :history, last_modified = :modified',
             ExpressionAttributeValues={
-                ':html': updated_html,
+                ':html': updated_html,  # For editor preview
+                ':raw': raw_template,   # For per-recipient personalization
                 ':config': updated_config,
                 ':history': version_history,
                 ':modified': datetime.now().isoformat()

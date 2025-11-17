@@ -82,40 +82,135 @@ def generate_email_html_from_template_instance(record, campaign_id):
             return generate_email_html_fallback(record, campaign_id)
         
         template_instance = response['Item']
-        template_html = template_instance.get('template_html', '')
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
         template_config = template_instance.get('template_config', {})
-        
-        # Personalized greeting
-        customer_name = record.get('customer_name', '')
-        greeting = f"Hi {customer_name}," if customer_name else "Hi there,"
-        
-        # School/team information
-        team = record.get('school_code', '')
-        team_text = f"Featured {team} Collection" if team else "Featured Collection"
-        
-        # Generate products HTML
-        product_count = sum(1 for i in range(1, 5) if record.get(f'product_image_{i}'))
-        products_html = generate_products_html(record, product_count, team_text)
-        
-        # Replace dynamic content in template
-        personalized_html = template_html
-        
-        # Personal replacements
-        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
-        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', team_text)
-        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
-        
-        # School-specific replacements
-        school_page = record.get('school_page', '#')
-        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
-        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
-        
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
+
+        # Personalize email using shared logic (same as preview endpoint)
+        personalized_html = generate_personalized_email_for_recipient(template_html_raw, template_config, record)
+
         return personalized_html
         
     except Exception as e:
         logger.error(f"Error generating email from template instance: {e}")
         # Fallback to old method
         return generate_email_html_fallback(record, campaign_id)
+
+def generate_personalized_email_for_recipient(template_html_raw, template_config, recipient):
+    """
+    Generate personalized HTML email for a recipient
+
+    Args:
+        template_html_raw: Raw template with {{PLACEHOLDERS}}
+        template_config: Base config from template instance (AI-generated or default)
+        recipient: Recipient data with products, school info, etc.
+    """
+    try:
+        # Start with raw template
+        personalized_html = template_html_raw
+
+        # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
+        # but SKIP PRODUCTS_HTML - we'll use recipient-specific products
+        for key, value in template_config.items():
+            if key != 'PRODUCTS_HTML':  # Skip - we'll use recipient products
+                placeholder = '{{' + key + '}}'
+                personalized_html = personalized_html.replace(placeholder, str(value))
+
+        # Step 2: Personalize greeting with recipient name
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        if recipient_name:
+            greeting = f"Hi {recipient_name},"
+            personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+
+        # Step 3: Get school/team information
+        school_code = recipient.get('school_code', '')
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        # Update products title with school name
+        if team_name:
+            products_title = f"Featured {team_name} Collection"
+            personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+
+        # Step 4: Generate recipient-specific products HTML
+        product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
+        products_html = generate_products_html(recipient, product_count, team_name or school_code)
+        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
+
+        # Step 5: School-specific links
+        school_page = recipient.get('school_page', template_config.get('CTA_LINK', '#'))
+        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+
+        # Step 6: Replace hero image if school logo is available
+        school_logo = recipient.get('school_logo', '')
+        if school_logo:
+            personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
+
+        return personalized_html
+
+    except Exception as e:
+        logger.error(f"Error generating personalized email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return template_html_raw
+
+def get_school_name_from_code(school_code):
+    """Get school name from school code using college-db-email table"""
+    try:
+        college_db_table = dynamodb.Table('college-db-email')
+        response = college_db_table.get_item(Key={'school_code': school_code})
+
+        if 'Item' in response:
+            return response['Item'].get('school_name', school_code)
+
+        return school_code
+    except Exception as e:
+        logger.error(f"Error getting school name: {e}")
+        return school_code
+
+def generate_personalized_subject(base_subject, recipient):
+    """
+    Generate personalized subject line for recipient
+
+    Examples:
+        "Hi John, Michigan Journals Just Dropped!"
+        "Hi Sarah, Your Favorite Team's New Collection!"
+
+    Args:
+        base_subject: AI-generated or default subject from template
+        recipient: Recipient record with name and school info
+    """
+    try:
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        school_code = recipient.get('school_code', '')
+
+        # Get team name if available
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        # Personalize subject line
+        if recipient_name and team_name:
+            # Best case: both name and team
+            # Pattern: "Hi {name}, {team} {product_category} Just Dropped!"
+            return f"Hi {recipient_name}, {team_name} Collection Just Dropped!"
+        elif recipient_name:
+            # Just name
+            return f"Hi {recipient_name}! {base_subject}"
+        elif team_name:
+            # Just team
+            return f"{team_name} {base_subject}"
+        else:
+            # Fallback to base subject
+            return base_subject
+
+    except Exception as e:
+        logger.error(f"Error generating personalized subject: {e}")
+        return base_subject
 
 def generate_products_html(record, product_count, team_text):
     """Generate HTML for products section"""
@@ -515,25 +610,35 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
         emails_sent = 0
         failed_emails = 0
         start_time = datetime.now()
-        
-        # Generate email subject
-        subject = template_config.get('subject', f"{template_config.get('main_title', 'New Collection')} - Don't Miss Out!")
-        
+
+        # Get template instance for subject line generation
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+        template_instance = template_response.get('Item', {}) if 'Item' in template_response else {}
+        template_config = template_instance.get('template_config', {})
+
+        # Base subject line (will be personalized per recipient)
+        base_subject = template_config.get('CAMPAIGN_TITLE', 'New Collection Available!')
+
         for i, record in enumerate(records):
             # Check timeout
             elapsed_minutes = (datetime.now() - start_time).total_seconds() / 60
             if elapsed_minutes >= BATCH_TIMEOUT_MINUTES:
                 logger.warning(f"Batch timeout reached after {elapsed_minutes:.1f} minutes")
                 break
-            
+
+            # Generate personalized subject line like: "Hi John, Michigan Journals Just Dropped!"
+            subject = generate_personalized_subject(base_subject, record)
+
             # Generate personalized email using new template instance method
             html_content = generate_email_html_from_template_instance(record, campaign_id)
-            
+
             if not html_content:
                 logger.error(f"Failed to generate email for {record['customer_email']}")
                 failed_emails += 1
                 continue
-            
+
             # Send email
             if send_email_ses(record['customer_email'], subject, html_content):
                 emails_sent += 1

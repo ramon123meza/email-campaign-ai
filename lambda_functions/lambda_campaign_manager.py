@@ -1260,10 +1260,18 @@ def preview_recipient_email(event):
             return cors_response(404, {'error': 'Template instance not found'})
 
         template_instance = template_response['Item']
-        template_html = template_instance.get('template_html', '')
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
+        template_config = template_instance.get('template_config', {})
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
 
         # Personalize the template for this recipient
-        personalized_html = generate_personalized_email(template_html, recipient)
+        personalized_html = generate_personalized_email(template_html_raw, template_config, recipient)
 
         return cors_response(200, {'html': personalized_html})
 
@@ -1273,35 +1281,52 @@ def preview_recipient_email(event):
         logger.error(traceback.format_exc())
         return cors_response(500, {'error': str(e)})
 
-def generate_personalized_email(template_html, recipient):
-    """Generate personalized HTML email for a recipient"""
+def generate_personalized_email(template_html_raw, template_config, recipient):
+    """
+    Generate personalized HTML email for a recipient
+
+    Args:
+        template_html_raw: Raw template with {{PLACEHOLDERS}}
+        template_config: Base config from template instance (AI-generated or default)
+        recipient: Recipient data with products, school info, etc.
+    """
     try:
-        # Personalized greeting
-        customer_name = recipient.get('customer_name', '')
-        greeting = f"Hi {customer_name}," if customer_name else "Hi there,"
+        # Start with raw template
+        personalized_html = template_html_raw
 
-        # School/team information
-        team = recipient.get('school_code', '')
-        team_text = f"Featured {team} Collection" if team else "Featured Collection"
+        # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
+        # but SKIP PRODUCTS_HTML - we'll use recipient-specific products
+        for key, value in template_config.items():
+            if key != 'PRODUCTS_HTML':  # Skip - we'll use recipient products
+                placeholder = '{{' + key + '}}'
+                personalized_html = personalized_html.replace(placeholder, str(value))
 
-        # Generate products HTML
+        # Step 2: Personalize greeting with recipient name
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        if recipient_name:
+            greeting = f"Hi {recipient_name},"
+            personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+
+        # Step 3: Get school/team information for dynamic subject
+        school_code = recipient.get('school_code', '')
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        # Update products title with school name
+        if team_name:
+            products_title = f"Featured {team_name} Collection"
+            personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+
+        # Step 4: Generate recipient-specific products HTML
         product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
         products_html = generate_products_html_for_preview(recipient, product_count)
-
-        # Replace dynamic content in template
-        personalized_html = template_html
-
-        # Personal replacements
-        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
-        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', team_text)
         personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
 
-        # School-specific replacements
-        school_page = recipient.get('school_page', '#')
+        # Step 5: School-specific links (from college-db-email table if available)
+        school_page = recipient.get('school_page', template_config.get('CTA_LINK', '#'))
         personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
         personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
 
-        # Replace hero image if school logo is available
+        # Step 6: Replace hero image if school logo is available
         school_logo = recipient.get('school_logo', '')
         if school_logo:
             personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
@@ -1310,7 +1335,23 @@ def generate_personalized_email(template_html, recipient):
 
     except Exception as e:
         logger.error(f"Error generating personalized email: {e}")
-        return template_html
+        import traceback
+        logger.error(traceback.format_exc())
+        return template_html_raw
+
+def get_school_name_from_code(school_code):
+    """Get school name from school code using college-db-email table"""
+    try:
+        college_db_table = dynamodb.Table('college-db-email')
+        response = college_db_table.get_item(Key={'school_code': school_code})
+
+        if 'Item' in response:
+            return response['Item'].get('school_name', school_code)
+
+        return school_code
+    except Exception as e:
+        logger.error(f"Error getting school name: {e}")
+        return school_code
 
 def generate_products_html_for_preview(recipient, product_count):
     """Generate HTML for products section in preview"""
