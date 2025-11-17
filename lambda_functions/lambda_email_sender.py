@@ -116,9 +116,9 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         personalized_html = template_html_raw
 
         # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
-        # but SKIP PRODUCTS_HTML - we'll use recipient-specific products
+        # but SKIP GREETING_TEXT and PRODUCTS_HTML - we'll personalize these per recipient
         for key, value in template_config.items():
-            if key != 'PRODUCTS_HTML':  # Skip - we'll use recipient products
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE']:  # Skip - we'll personalize these
                 placeholder = '{{' + key + '}}'
                 personalized_html = personalized_html.replace(placeholder, str(value))
 
@@ -126,7 +126,10 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
         if recipient_name:
             greeting = f"Hi {recipient_name},"
-            personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+        else:
+            # Fallback to AI-generated or default greeting if no name
+            greeting = template_config.get('GREETING_TEXT', 'Hi there,')
+        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
 
         # Step 3: Get school/team information
         school_code = recipient.get('school_code', '')

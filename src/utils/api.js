@@ -130,9 +130,13 @@ export const campaignAPI = {
   deleteCampaign: (id) => campaignApi.delete(`/api/campaigns/${id}`),
   
   // File upload
-  uploadFile: (campaignId, fileData) => 
+  uploadFile: (campaignId, fileData) =>
     campaignApi.post(`/api/campaigns/${campaignId}/upload`, fileData),
-  
+
+  // Hero image upload
+  uploadHeroImage: (campaignId, imageData) =>
+    campaignApi.post(`/api/campaigns/${campaignId}/upload-hero-image`, imageData),
+
   // Campaign processing
   processCampaign: (campaignId) =>
     campaignApi.post(`/api/campaigns/${campaignId}/process`),

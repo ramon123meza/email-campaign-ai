@@ -186,6 +186,8 @@ def lambda_handler(event, context):
             return upload_products_file(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/process'):
             return process_campaign(event)
+        elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/upload-hero-image'):
+            return upload_hero_image(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/upload-image'):
             return upload_campaign_image(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/ai-generate'):
@@ -771,6 +773,108 @@ def upload_campaign_image(event):
         logger.error(f"Error uploading campaign image: {e}")
         return cors_response(500, {'error': str(e)})
 
+def upload_hero_image(event):
+    """Upload hero image to S3 (layout-tool-randr) and update template config"""
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]  # /api/campaigns/{campaign_id}/upload-hero-image
+
+        body = event.get('body', {})
+        if isinstance(body, str):
+            body = json.loads(body)
+
+        image_content = body.get('image_content')
+        filename = body.get('file_name', body.get('filename', 'hero-image.jpg'))
+        content_type = body.get('content_type', 'image/jpeg')
+
+        if not image_content:
+            return cors_response(400, {'error': 'No image content provided'})
+
+        # Decode base64 image content
+        try:
+            image_data = base64.b64decode(image_content)
+        except Exception as e:
+            return cors_response(400, {'error': 'Invalid image content'})
+
+        # Upload to S3 (layout-tool-randr bucket)
+        s3_key = f"campaigns/{campaign_id}/hero/{filename}"
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET,  # layout-tool-randr
+                Key=s3_key,
+                Body=image_data,
+                ContentType=content_type
+            )
+            logger.info(f"Uploaded hero image to s3://{S3_BUCKET}/{s3_key}")
+        except Exception as e:
+            logger.error(f"Error uploading hero image to S3: {e}")
+            return cors_response(500, {'error': f'Failed to upload image: {str(e)}'})
+
+        # Generate public URL
+        image_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+
+        # Update template instance with new hero image URL
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+
+        try:
+            # Get current template instance
+            response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+            if 'Item' not in response:
+                return cors_response(404, {'error': 'Template instance not found'})
+
+            template_instance = response['Item']
+            template_config = template_instance.get('template_config', {})
+
+            # Update HERO_IMAGE_URL in config
+            template_config['HERO_IMAGE_URL'] = image_url
+
+            # Re-render template_html with new hero image
+            template_html_raw = template_instance.get('template_html_raw', '')
+            if template_html_raw:
+                # Apply config to raw template
+                template_html = template_html_raw
+                for key, value in template_config.items():
+                    template_html = template_html.replace('{{' + key + '}}', str(value))
+            else:
+                # If no raw template, just update config
+                template_html = template_instance.get('template_html', '')
+
+            # Update template instance
+            template_instances_table.update_item(
+                Key={'campaign_id': campaign_id},
+                UpdateExpression='SET template_config.HERO_IMAGE_URL = :url, template_html = :html, last_modified = :modified',
+                ExpressionAttributeValues={
+                    ':url': image_url,
+                    ':html': template_html,
+                    ':modified': datetime.now().isoformat()
+                }
+            )
+
+            logger.info(f"Updated template instance for campaign {campaign_id} with hero image")
+
+        except Exception as e:
+            logger.error(f"Error updating template instance: {e}")
+            # Continue anyway - image was uploaded to S3
+
+        return cors_response(200, {
+            'message': 'Hero image uploaded successfully',
+            'image_url': image_url,
+            's3_key': s3_key
+        })
+
+    except Exception as e:
+        logger.error(f"Error uploading hero image: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
 def process_campaign(event):
     """Process campaign data: extract products, match with customers, create batches"""
     try:
@@ -1295,9 +1399,9 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
         personalized_html = template_html_raw
 
         # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
-        # but SKIP PRODUCTS_HTML - we'll use recipient-specific products
+        # but SKIP GREETING_TEXT and PRODUCTS_HTML - we'll personalize these per recipient
         for key, value in template_config.items():
-            if key != 'PRODUCTS_HTML':  # Skip - we'll use recipient products
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE']:  # Skip - we'll personalize these
                 placeholder = '{{' + key + '}}'
                 personalized_html = personalized_html.replace(placeholder, str(value))
 
@@ -1305,7 +1409,10 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
         recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
         if recipient_name:
             greeting = f"Hi {recipient_name},"
-            personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+        else:
+            # Fallback to AI-generated or default greeting if no name
+            greeting = template_config.get('GREETING_TEXT', 'Hi there,')
+        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
 
         # Step 3: Get school/team information for dynamic subject
         school_code = recipient.get('school_code', '')
