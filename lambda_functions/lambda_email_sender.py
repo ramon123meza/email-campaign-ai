@@ -196,15 +196,33 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
 def get_school_name_from_code(school_code):
     """Get school name from school code using college-db-email table"""
     try:
+        if not school_code:
+            logger.warning("get_school_name_from_code called with empty school_code")
+            return school_code
+
         college_db_table = dynamodb.Table('college-db-email')
+        logger.info(f"Looking up school_code='{school_code}' in college-db-email table")
+
         response = college_db_table.get_item(Key={'school_code': school_code})
 
         if 'Item' in response:
-            return response['Item'].get('school_name', school_code)
+            school_name = response['Item'].get('school_name', '')
+            logger.info(f"Found school entry: school_code='{school_code}', school_name='{school_name}'")
 
-        return school_code
+            # If school_name is empty or same as code, log warning
+            if not school_name or school_name == school_code:
+                logger.warning(f"School entry exists but school_name is empty or equals code: school_code='{school_code}', school_name='{school_name}'")
+                return school_code
+
+            return school_name
+        else:
+            logger.warning(f"No entry found in college-db-email for school_code='{school_code}'")
+            return school_code
+
     except Exception as e:
-        logger.error(f"Error getting school name: {e}")
+        logger.error(f"Error getting school name for code '{school_code}': {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return school_code
 
 def generate_personalized_subject(base_subject, recipient):
