@@ -254,7 +254,7 @@ const EmailCanvas = forwardRef((props, ref) => {
                 display: 'block'
               }}
               title="Email Preview"
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts"
             />
           </div>
         </div>

@@ -65,8 +65,8 @@ function Layout({ children }) {
                     className={clsx(
                       'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200',
                       location.pathname === item.href
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg transform scale-105'
-                        : 'text-gray-700 hover:bg-white/50 hover:shadow-md'
+                        ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg transform scale-105'
+                        : 'text-gray-700 hover:bg-blue-50 hover:shadow-md hover:text-blue-700'
                     )}
                     onClick={() => setSidebarOpen(false)}
                   >
@@ -103,8 +103,8 @@ function Layout({ children }) {
                     className={clsx(
                       'group flex items-center gap-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
                       location.pathname === item.href
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                        : 'text-gray-700 hover:bg-white/50 hover:shadow-md'
+                        ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg'
+                        : 'text-gray-700 hover:bg-blue-50 hover:shadow-md hover:text-blue-700'
                     )}
                   >
                     <item.icon className={clsx(
@@ -118,7 +118,7 @@ function Layout({ children }) {
             </ul>
           </nav>
 
-          <div className="mt-auto p-4 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 border border-purple-200">
+          <div className="mt-auto p-4 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 border border-blue-200">
             <p className="text-xs text-gray-600 font-medium">✨ AI-Powered Features</p>
             <p className="text-xs text-gray-500 mt-1">Claude Sonnet 4.5 integration active</p>
           </div>
@@ -146,8 +146,8 @@ function Layout({ children }) {
               </div>
 
               <div className="flex items-center gap-x-4 lg:gap-x-6">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-100 to-pink-100">
-                  <Sparkles className="h-4 w-4 text-purple-600" />
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-100 to-cyan-100">
+                  <Sparkles className="h-4 w-4 text-blue-600" />
                   <span className="text-sm font-medium text-gray-700">R&R Imports</span>
                 </div>
               </div>

@@ -130,9 +130,13 @@ export const campaignAPI = {
   deleteCampaign: (id) => campaignApi.delete(`/api/campaigns/${id}`),
   
   // File upload
-  uploadFile: (campaignId, fileData) => 
+  uploadFile: (campaignId, fileData) =>
     campaignApi.post(`/api/campaigns/${campaignId}/upload`, fileData),
-  
+
+  // Hero image upload
+  uploadHeroImage: (campaignId, imageData) =>
+    campaignApi.post(`/api/campaigns/${campaignId}/upload-hero-image`, imageData),
+
   // Campaign processing
   processCampaign: (campaignId) =>
     campaignApi.post(`/api/campaigns/${campaignId}/process`),
@@ -144,7 +148,19 @@ export const campaignAPI = {
   // Batches
   getCampaignBatches: (campaignId) =>
     campaignApi.get(`/api/campaigns/${campaignId}/batches`),
-  
+
+  getBatchRecipients: (campaignId, batchNumber) =>
+    campaignApi.get(`/api/campaigns/${campaignId}/batches/${batchNumber}/recipients`),
+
+  previewRecipientEmail: (campaignId, recordId) =>
+    campaignApi.get(`/api/campaigns/${campaignId}/preview/${recordId}`),
+
+  // Test user preview (shows real test user data with products)
+  getTestPreview: (campaignId, testUserEmail = null) => {
+    const params = testUserEmail ? `?test_user_email=${encodeURIComponent(testUserEmail)}` : ''
+    return campaignApi.get(`/api/campaigns/${campaignId}/test-preview${params}`)
+  },
+
   // Colleges
   getColleges: () => campaignApi.get('/api/colleges'),
   createCollege: (data) => campaignApi.post('/api/colleges', data),
@@ -165,7 +181,8 @@ export const campaignAPI = {
   // Template instances (AI Template service)
   getTemplateInstance: (campaignId) => aiTemplateApi.get(`/api/campaigns/${campaignId}/template-instance`),
   createTemplateInstance: (campaignId, data = {}) => aiTemplateApi.post(`/api/campaigns/${campaignId}/create-template-instance`, data),
-  
+  updateTemplateConfig: (campaignId, config) => campaignApi.put(`/api/campaigns/${campaignId}/template-config`, { template_config: config }),
+
   // AI Template Editor functions
   sendAIChat: (campaignId, message) => aiTemplateApi.post(`/api/campaigns/${campaignId}/ai-chat`, { message }),
   sendAIEdit: (campaignId, request) => aiTemplateApi.post(`/api/campaigns/${campaignId}/ai-edit`, request),

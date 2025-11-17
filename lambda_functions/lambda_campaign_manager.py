@@ -131,6 +131,153 @@ def call_openai_api(messages, max_tokens=2000, temperature=0.7):
         logger.error(f"Error calling OpenAI API: {str(e)}")
         raise
 
+def generate_campaign_content_from_products(product_titles, campaign_id):
+    """
+    Analyze products and generate AI campaign content that uses placeholders
+
+    CRITICAL: AI must use placeholders like {{TEAM_NAME}} instead of actual school names
+    so that content can be personalized per recipient at send time.
+    """
+    try:
+        if not OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY not set - skipping AI content generation")
+            return None
+
+        # Create product list for AI
+        products_text = "\n".join([f"- {title}" for title in product_titles[:10]])
+
+        system_prompt = """You are an expert email marketing copywriter for R and R Imports, Inc., a company that sells NCAA college merchandise.
+
+CRITICAL RULES:
+1. You are creating ONE template that will be personalized for MANY different schools
+2. NEVER mention specific school names (like "Akron Zips", "Alabama", "BGU", "AKN", etc.)
+3. ALWAYS use placeholders for school-specific content
+4. The template will be personalized at send time with each recipient's school
+
+AVAILABLE PLACEHOLDERS (you MUST use these):
+- {{TEAM_NAME}} - Will be replaced with the recipient's school name (e.g., "Akron Zips")
+- {{SCHOOL_PAGE}} - Will be replaced with the recipient's school store URL
+- {{GREETING_TEXT}} - Will be replaced with personalized greeting
+- {{PRODUCTS_HTML}} - Will be replaced with recipient's products
+
+GOOD EXAMPLES:
+✅ "Celebrate your {{TEAM_NAME}} pride with style!"
+✅ "Show your {{TEAM_NAME}} spirit wherever you go"
+✅ "Perfect for {{TEAM_NAME}} fans who want to stand out"
+✅ "Rep your team with {{TEAM_NAME}} gear"
+
+BAD EXAMPLES (NEVER do this):
+❌ "Featuring schools like BGU, ALS, and AKN"
+❌ "Perfect for Akron Zips fans"
+❌ "Alabama, Ohio State, and Michigan fans will love this"
+❌ "Show your college pride" (too generic - mention {{TEAM_NAME}} instead)
+
+Your task: Analyze the products and create engaging email content that uses placeholders appropriately."""
+
+        user_message = f"""Products in this campaign:
+{products_text}
+
+Generate compelling email content for this collection. Return ONLY valid JSON with this structure:
+{{
+  "main_title": "Campaign headline (use placeholders if mentioning teams)",
+  "description": "Main description paragraph (MUST use {{{{TEAM_NAME}}}} placeholder, NOT specific schools)",
+  "products_title": "Products section title (use placeholders appropriately)",
+  "products_subtitle": "Products section subtitle (use placeholders appropriately)"
+}}
+
+Remember: Use {{{{TEAM_NAME}}}} placeholder, NOT actual school names!"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+        logger.info("Calling OpenAI API for product analysis...")
+        ai_response = call_openai_api(messages, max_tokens=500, temperature=0.7)
+        logger.info(f"AI Response: {ai_response}")
+
+        # Parse JSON response
+        try:
+            # Extract JSON from response (handle markdown code blocks)
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                ai_response = ai_response[json_start:json_end]
+
+            ai_content = json.loads(ai_response)
+
+            # Validate that content uses placeholders and doesn't mention specific schools
+            description = ai_content.get('description', '')
+            if '{{TEAM_NAME}}' not in description:
+                logger.warning("AI description doesn't use {{TEAM_NAME}} placeholder - fixing...")
+                # Fix common issues
+                for bad_phrase in ['colleges', 'schools like', 'universities like', 'teams']:
+                    if bad_phrase in description.lower():
+                        description = description.replace(bad_phrase, '{{TEAM_NAME}}')
+                        break
+                else:
+                    description = f"Celebrate your {{{{TEAM_NAME}}}} pride with {description}"
+                ai_content['description'] = description
+
+            # Update template instance with AI content
+            template_instances_table = dynamodb.Table('campaign_template_instances')
+            response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+            if 'Item' in response:
+                template_instance = response['Item']
+                template_config = template_instance.get('template_config', {})
+
+                # Update config with AI content (preserving placeholders)
+                template_config['MAIN_TITLE'] = ai_content.get('main_title', template_config.get('MAIN_TITLE', 'New Collection Available!'))
+                template_config['DESCRIPTION_TEXT'] = ai_content.get('description', template_config.get('DESCRIPTION_TEXT', 'Check out our latest collection!'))
+                template_config['PRODUCTS_TITLE'] = ai_content.get('products_title', template_config.get('PRODUCTS_TITLE', 'Featured Collection'))
+                template_config['PRODUCTS_SUBTITLE'] = ai_content.get('products_subtitle', template_config.get('PRODUCTS_SUBTITLE', 'Selected just for you!'))
+
+                # Get raw template with placeholders
+                standard_template = get_standard_email_template()
+
+                # Create two versions:
+                # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+                template_html_raw = standard_template
+
+                # 2. template_html - Render ONLY static placeholders for preview
+                # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+                runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
+                template_html = standard_template
+                for key, value in template_config.items():
+                    if key not in runtime_placeholders:
+                        template_html = template_html.replace('{{' + key + '}}', str(value))
+
+                # Update template instance
+                template_instances_table.update_item(
+                    Key={'campaign_id': campaign_id},
+                    UpdateExpression='SET template_config = :config, template_html = :html, template_html_raw = :raw, last_modified = :modified',
+                    ExpressionAttributeValues={
+                        ':config': template_config,
+                        ':html': template_html,
+                        ':raw': template_html_raw,
+                        ':modified': datetime.now().isoformat()
+                    }
+                )
+
+                logger.info(f"Updated template with AI-generated content for campaign {campaign_id}")
+                return ai_content
+            else:
+                logger.warning(f"Template instance not found for campaign {campaign_id}")
+                return None
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            logger.error(f"AI Response was: {ai_response}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error generating campaign content from products: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
 def cors_response(status_code, body):
     """Standard CORS response with Decimal handling"""
     return {
@@ -186,6 +333,8 @@ def lambda_handler(event, context):
             return upload_products_file(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/process'):
             return process_campaign(event)
+        elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/upload-hero-image'):
+            return upload_hero_image(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/upload-image'):
             return upload_campaign_image(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/ai-generate'):
@@ -198,6 +347,8 @@ def lambda_handler(event, context):
             return get_campaign_template(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/template-instance'):
             return get_template_instance(event)
+        elif method == 'PUT' and path.startswith('/api/campaigns/') and path.endswith('/template-config'):
+            return update_template_config(event)
         elif method == 'POST' and path.startswith('/api/campaigns/') and path.endswith('/create-template-instance'):
             return create_template_instance(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/versions'):
@@ -206,6 +357,12 @@ def lambda_handler(event, context):
             return restore_template_version(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/preview-customer'):
             return preview_customer_email(event)
+        elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/test-preview'):
+            return preview_test_user_email(event)
+        elif method == 'GET' and '/preview/' in path and path.startswith('/api/campaigns/'):
+            return preview_recipient_email(event)
+        elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches/' in path and '/recipients' in path:
+            return get_batch_recipients(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches/' in path and '/emails' in path:
             return get_batch_emails(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches' in path:
@@ -313,21 +470,30 @@ def create_campaign(event):
                 'UNSUBSCRIBE_URL': 'https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html'
             }
             
-            # Apply variables to template
+            # Create two versions:
+            # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+            template_html_raw = standard_template
+
+            # 2. template_html - Render ONLY static placeholders for preview
+            # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+            runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
             rendered_html = standard_template
             for key, value in template_vars.items():
-                rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
-            
+                if key not in runtime_placeholders:
+                    rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
+
             template_instance = {
                 'campaign_id': campaign_id,
-                'template_html': rendered_html,
+                'template_html': rendered_html,  # Preview version (static placeholders replaced)
+                'template_html_raw': template_html_raw,  # Raw version (all placeholders intact)
                 'template_config': template_vars,
                 'version_history': [],
                 'last_modified': datetime.now().isoformat(),
                 'ai_chat_history': [],
                 'created_at': datetime.now().isoformat()
             }
-            
+
             template_instances_table.put_item(Item=template_instance)
             
             # Update campaign to mark template instance created
@@ -689,11 +855,34 @@ def upload_products_file(event):
                 ':updated': datetime.now().isoformat()
             }
         )
-        
+
+        # ANALYZE PRODUCTS WITH AI to generate campaign content
+        try:
+            logger.info(f"Analyzing products with AI for campaign {campaign_id}...")
+
+            # Sample first 10 products for analysis
+            sample_products = df.head(10)
+            product_titles = sample_products['Title'].dropna().tolist()[:10]
+
+            # Generate campaign content with AI
+            ai_content = generate_campaign_content_from_products(product_titles, campaign_id)
+
+            if ai_content:
+                logger.info(f"AI generated campaign content successfully")
+            else:
+                logger.warning("AI content generation returned empty results")
+
+        except Exception as e:
+            logger.error(f"Error in AI product analysis: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Don't fail the upload if AI fails - just log the error
+
         return cors_response(200, {
             'message': 'File uploaded successfully',
             'records_count': len(df),
-            's3_key': s3_key
+            's3_key': s3_key,
+            'ai_analyzed': True
         })
         
     except Exception as e:
@@ -765,6 +954,108 @@ def upload_campaign_image(event):
 
     except Exception as e:
         logger.error(f"Error uploading campaign image: {e}")
+        return cors_response(500, {'error': str(e)})
+
+def upload_hero_image(event):
+    """Upload hero image to S3 (layout-tool-randr) and update template config"""
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]  # /api/campaigns/{campaign_id}/upload-hero-image
+
+        body = event.get('body', {})
+        if isinstance(body, str):
+            body = json.loads(body)
+
+        image_content = body.get('image_content')
+        filename = body.get('file_name', body.get('filename', 'hero-image.jpg'))
+        content_type = body.get('content_type', 'image/jpeg')
+
+        if not image_content:
+            return cors_response(400, {'error': 'No image content provided'})
+
+        # Decode base64 image content
+        try:
+            image_data = base64.b64decode(image_content)
+        except Exception as e:
+            return cors_response(400, {'error': 'Invalid image content'})
+
+        # Upload to S3 (layout-tool-randr bucket)
+        s3_key = f"campaigns/{campaign_id}/hero/{filename}"
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET,  # layout-tool-randr
+                Key=s3_key,
+                Body=image_data,
+                ContentType=content_type
+            )
+            logger.info(f"Uploaded hero image to s3://{S3_BUCKET}/{s3_key}")
+        except Exception as e:
+            logger.error(f"Error uploading hero image to S3: {e}")
+            return cors_response(500, {'error': f'Failed to upload image: {str(e)}'})
+
+        # Generate public URL
+        image_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+
+        # Update template instance with new hero image URL
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+
+        try:
+            # Get current template instance
+            response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+            if 'Item' not in response:
+                return cors_response(404, {'error': 'Template instance not found'})
+
+            template_instance = response['Item']
+            template_config = template_instance.get('template_config', {})
+
+            # Update HERO_IMAGE_URL in config
+            template_config['HERO_IMAGE_URL'] = image_url
+
+            # Re-render template_html with new hero image
+            template_html_raw = template_instance.get('template_html_raw', '')
+            if template_html_raw:
+                # Apply config to raw template
+                template_html = template_html_raw
+                for key, value in template_config.items():
+                    template_html = template_html.replace('{{' + key + '}}', str(value))
+            else:
+                # If no raw template, just update config
+                template_html = template_instance.get('template_html', '')
+
+            # Update template instance
+            template_instances_table.update_item(
+                Key={'campaign_id': campaign_id},
+                UpdateExpression='SET template_config.HERO_IMAGE_URL = :url, template_html = :html, last_modified = :modified',
+                ExpressionAttributeValues={
+                    ':url': image_url,
+                    ':html': template_html,
+                    ':modified': datetime.now().isoformat()
+                }
+            )
+
+            logger.info(f"Updated template instance for campaign {campaign_id} with hero image")
+
+        except Exception as e:
+            logger.error(f"Error updating template instance: {e}")
+            # Continue anyway - image was uploaded to S3
+
+        return cors_response(200, {
+            'message': 'Hero image uploaded successfully',
+            'image_url': image_url,
+            's3_key': s3_key
+        })
+
+    except Exception as e:
+        logger.error(f"Error uploading hero image: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return cors_response(500, {'error': str(e)})
 
 def process_campaign(event):
@@ -1178,6 +1469,304 @@ def get_batch_emails(event):
     except Exception as e:
         logger.error(f"Error getting batch emails: {e}")
         return cors_response(500, {'error': str(e)})
+
+def get_batch_recipients(event):
+    """Get all recipients for a specific batch from campaign_data table"""
+    try:
+        # Extract campaign_id and batch_number from path
+        # Path format: /api/campaigns/{campaign_id}/batches/{batch_number}/recipients
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+        batch_number = int(path_parts[5])
+
+        logger.info(f"Getting recipients for campaign {campaign_id}, batch {batch_number}")
+
+        # Query campaign_data table using BatchIndex GSI
+        campaign_data_table = dynamodb.Table('campaign_data')
+
+        response = campaign_data_table.query(
+            IndexName='BatchIndex',
+            KeyConditionExpression=Key('campaign_id').eq(campaign_id) & Key('batch_number').eq(batch_number),
+            Limit=2000  # One batch max
+        )
+
+        recipients = response.get('Items', [])
+
+        logger.info(f"Found {len(recipients)} recipients")
+
+        return cors_response(200, recipients)
+
+    except Exception as e:
+        logger.error(f"Error getting batch recipients: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def preview_recipient_email(event):
+    """Generate HTML preview for a specific recipient's email"""
+    try:
+        # Extract campaign_id and record_id from path
+        # Path format: /api/campaigns/{campaign_id}/preview/{record_id}
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+        record_id = path_parts[5]
+
+        logger.info(f"Previewing email for campaign {campaign_id}, record {record_id}")
+
+        # Get recipient record from campaign_data
+        campaign_data_table = dynamodb.Table('campaign_data')
+        response = campaign_data_table.get_item(
+            Key={
+                'campaign_id': campaign_id,
+                'record_id': record_id
+            }
+        )
+
+        if 'Item' not in response:
+            return cors_response(404, {'error': 'Recipient not found'})
+
+        recipient = response['Item']
+
+        # Get template instance for this campaign
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(
+            Key={'campaign_id': campaign_id}
+        )
+
+        if 'Item' not in template_response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = template_response['Item']
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
+        template_config = template_instance.get('template_config', {})
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
+
+        # Personalize the template for this recipient
+        personalized_html = generate_personalized_email(template_html_raw, template_config, recipient)
+
+        return cors_response(200, {'html': personalized_html})
+
+    except Exception as e:
+        logger.error(f"Error previewing recipient email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def generate_personalized_email(template_html_raw, template_config, recipient):
+    """
+    Generate personalized HTML email for a recipient
+
+    Args:
+        template_html_raw: Raw template with {{PLACEHOLDERS}}
+        template_config: Base config from template instance (AI-generated or default)
+        recipient: Recipient data with products, school info, etc.
+    """
+    try:
+        # Start with raw template
+        personalized_html = template_html_raw
+
+        # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
+        # but SKIP fields that need per-recipient personalization
+        # IMPORTANT: We skip DESCRIPTION_TEXT because it should be personalized per recipient
+        for key, value in template_config.items():
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'DESCRIPTION_TEXT']:  # Skip - we'll personalize these
+                placeholder = '{{' + key + '}}'
+                personalized_html = personalized_html.replace(placeholder, str(value))
+
+        # Step 2: Personalize greeting with recipient name
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        if recipient_name:
+            greeting = f"Hi {recipient_name},"
+        else:
+            # Fallback to AI-generated or default greeting if no name
+            greeting = template_config.get('GREETING_TEXT', 'Hi there,')
+        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+
+        # Step 3: Get school/team information for dynamic subject
+        school_code = recipient.get('school_code', '')
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        logger.info(f"Personalizing preview for school_code={school_code}, team_name={team_name}")
+
+        # CRITICAL: Replace {{TEAM_NAME}} placeholder globally in the entire HTML
+        # This handles AI-generated content that uses {{TEAM_NAME}} in MAIN_TITLE, DESCRIPTION_TEXT, etc.
+        if team_name and team_name != school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', team_name)
+        elif school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', school_code)
+        else:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', 'Your Team')
+
+        # Update products title with school name (ALWAYS replace, even if no team_name)
+        if team_name and team_name != school_code:
+            products_title = f"Featured {team_name} Collection"
+        elif school_code:
+            # Fallback: still use school code if lookup failed, but mark it clearly
+            products_title = f"Featured {school_code} Collection"
+        else:
+            products_title = "Featured Collection"
+        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+
+        # Also replace PRODUCTS_SUBTITLE with school-specific text
+        if team_name and team_name != school_code:
+            products_subtitle = f"Show your {team_name} pride with these exclusive items!"
+        else:
+            products_subtitle = template_config.get('PRODUCTS_SUBTITLE', 'We\'ve selected these exclusive items just for you!')
+        personalized_html = personalized_html.replace('{{PRODUCTS_SUBTITLE}}', products_subtitle)
+
+        # Step 3b: Personalize DESCRIPTION_TEXT for this recipient's school ONLY
+        # CRITICAL: Each recipient sees ONLY their school, not multiple schools
+        if team_name and team_name != school_code:
+            # Use full school name
+            description = f"Discover exclusive {team_name} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        elif school_code:
+            # Fallback to school code if name lookup failed
+            description = f"Discover exclusive {school_code} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        else:
+            # Generic fallback
+            description = template_config.get('DESCRIPTION_TEXT', 'Discover something special just for you!')
+        personalized_html = personalized_html.replace('{{DESCRIPTION_TEXT}}', description)
+
+        # Step 4: Generate recipient-specific products HTML
+        product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
+        products_html = generate_products_html_for_preview(recipient, product_count)
+        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
+
+        # Step 5: School-specific links (from college-db-email table if available)
+        school_page = recipient.get('school_page', template_config.get('CTA_PRIMARY_LINK', '#'))
+        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{SCHOOL_PAGE}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_SECONDARY_LINK}}', school_page)
+
+        # Step 6: Replace hero image if school logo is available
+        school_logo = recipient.get('school_logo', '')
+        if school_logo:
+            personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
+
+        return personalized_html
+
+    except Exception as e:
+        logger.error(f"Error generating personalized email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return template_html_raw
+
+def get_school_name_from_code(school_code):
+    """Get school name from school code using college-db-email table
+
+    NOTE: The college-db-email table has partition key 'school_name' (the full name),
+    and 'school_code' (e.g., 'AKN') is just an attribute. We must scan the table
+    to find the school by code. This is efficient since table has <200 records.
+    """
+    try:
+        if not school_code:
+            logger.warning("get_school_name_from_code called with empty school_code")
+            return school_code
+
+        college_db_table = dynamodb.Table('college-db-email')
+        logger.info(f"Scanning college-db-email table for school_code='{school_code}'")
+
+        # Must use scan() since school_code is an attribute, not the partition key
+        response = college_db_table.scan(
+            FilterExpression=Attr('school_code').eq(school_code)
+        )
+
+        items = response.get('Items', [])
+        if items:
+            school_name = items[0].get('school_name', '')
+            logger.info(f"Found school entry: school_code='{school_code}', school_name='{school_name}'")
+
+            # If school_name is empty or same as code, log warning
+            if not school_name or school_name == school_code:
+                logger.warning(f"School entry exists but school_name is empty or equals code: school_code='{school_code}', school_name='{school_name}'")
+                return school_code
+
+            return school_name
+        else:
+            logger.warning(f"No entry found in college-db-email for school_code='{school_code}'")
+            return school_code
+
+    except Exception as e:
+        logger.error(f"Error getting school name for code '{school_code}': {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return school_code
+
+def generate_products_html_for_preview(recipient, product_count):
+    """Generate HTML for products section in preview"""
+    if product_count == 0:
+        return '<!-- No products available -->'
+
+    if product_count == 1:
+        # Single product layout
+        return f'''
+<td width="100%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="{recipient.get('product_link_1', '#')}" target="_blank">
+<img src="{recipient.get('product_image_1', '')}" alt="{recipient.get('product_name_1', 'Product')}" style="display:block;border:0;max-width:300px;max-height:300px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#333333;margin:0 0 5px 0;">{recipient.get('product_name_1', '')}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:20px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${recipient.get('product_price_1', '0.00')}</p>
+<a href="{recipient.get('product_link_1', '#')}" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+    else:
+        # Multiple products layout
+        products_per_row = min(product_count, 2)
+        width_percent = 100 // products_per_row
+
+        products_html = ''
+        for i in range(1, product_count + 1):
+            product_image = recipient.get(f'product_image_{i}', '')
+            product_link = recipient.get(f'product_link_{i}', '#')
+            product_name = recipient.get(f'product_name_{i}', '')
+            product_price = recipient.get(f'product_price_{i}', '0.00')
+
+            if product_image:
+                products_html += f'''
+<td width="{width_percent}%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="{product_link}" target="_blank">
+<img src="{product_image}" alt="{product_name}" style="display:block;border:0;max-width:250px;max-height:250px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:14px;color:#333333;margin:0 0 5px 0;">{product_name}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:18px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product_price}</p>
+<a href="{product_link}" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:8px 16px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:12px;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+
+                # Start new row after 2 products
+                if i % 2 == 0 and i < product_count:
+                    products_html += "</tr><tr>"
+
+        return products_html
 
 def get_colleges(event):
     """Get all colleges"""
@@ -1863,6 +2452,176 @@ def restore_template_version(event):
         logger.error(f"Error restoring version: {e}")
         return cors_response(500, {'error': str(e)})
 
+def preview_test_user_email(event):
+    """
+    Generate preview using test user data - shows EXACTLY what test emails will look like
+    Uses specified test user (via query param) or first active test user
+    Includes real products and full personalization
+    """
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+
+        # Check if specific test user requested via query parameter
+        query_params = event.get('queryStringParameters') or {}
+        requested_email = query_params.get('test_user_email', '')
+
+        logger.info(f"Generating test user preview for campaign {campaign_id}, requested: {requested_email}")
+
+        # Get test users from test_users table
+        test_users_table = dynamodb.Table('test_users')
+
+        if requested_email:
+            # Get specific test user
+            response = test_users_table.scan(
+                FilterExpression=Attr('email').eq(requested_email) & Attr('active').eq(True),
+                Limit=1
+            )
+        else:
+            # Get first active test user
+            response = test_users_table.scan(
+                FilterExpression=Attr('active').eq(True),
+                Limit=1
+            )
+
+        test_users = response.get('Items', [])
+        if not test_users:
+            # Fallback to generic preview
+            logger.warning("No test users found, returning generic preview")
+            return cors_response(404, {'error': 'No active test users found in test_users table'})
+
+        test_user = test_users[0]
+        school_code = test_user.get('school_code', '')
+
+        logger.info(f"========== TEST USER PREVIEW ==========")
+        logger.info(f"Test User Selected: {test_user['name']} ({test_user['email']})")
+        logger.info(f"School Code: {school_code}")
+        logger.info(f"Requested Email: {requested_email or 'None (using first active)'}")
+        logger.info(f"========================================")
+
+        # Get products for this test user's school (with fallback logic)
+        recipient_data = get_products_for_test_user_preview(campaign_id, school_code)
+
+        if not recipient_data:
+            logger.warning(f"No products found for test user school {school_code} or fallbacks")
+            return cors_response(404, {'error': f'No products found for school {school_code} or any fallback schools'})
+
+        # Override with test user info
+        recipient_data['customer_email'] = test_user['email']
+        recipient_data['recipient_name'] = test_user['name']
+        recipient_data['customer_name'] = test_user['name']
+
+        # Get template instance for this campaign
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(
+            Key={'campaign_id': campaign_id}
+        )
+
+        if 'Item' not in template_response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = template_response['Item']
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
+        template_config = template_instance.get('template_config', {})
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
+
+        # Personalize the template for this test user (SAME AS REAL TEST EMAILS)
+        personalized_html = generate_personalized_email(template_html_raw, template_config, recipient_data)
+
+        logger.info(f"Generated test preview for {test_user['name']} with {school_code} school products")
+
+        return cors_response(200, {
+            'html': personalized_html,
+            'test_user': {
+                'name': test_user['name'],
+                'email': test_user['email'],
+                'school_code': school_code,
+                'school_name': recipient_data.get('school_name', school_code)
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error previewing test user email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def get_products_for_test_user_preview(campaign_id, school_code):
+    """
+    Get products for test user preview - same logic as test email sending
+    """
+    try:
+        campaign_data_table = dynamodb.Table('campaign_data')
+        college_db_table = dynamodb.Table('college-db-email')
+
+        # Fallback schools in order (same as test email logic)
+        FALLBACK_SCHOOLS = [
+            'ACU', 'AKN', 'ALA', 'ALB', 'ALC', 'ALS', 'APS', 'ARK', 'ARS', 'ATU',
+            'AUB', 'BALL', 'BAY', 'BGU', 'BST', 'BUT', 'BYU', 'CCU', 'CHAR', 'CHI',
+            'CHIC', 'CLE', 'CMI', 'CMP', 'CNU', 'CO', 'COL', 'CSL', 'DAV', 'DAY', 'DEL'
+        ]
+
+        # Try preferred school first, then fallbacks
+        schools_to_try = [school_code] if school_code else []
+        schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
+
+        logger.info(f"Searching for products - Preferred school: {school_code}, Will try in order: {schools_to_try[:5]}...")
+
+        for try_school in schools_to_try:
+            logger.info(f"Trying school: {try_school}")
+            # Query campaign_data for this school
+            response = campaign_data_table.query(
+                KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+                FilterExpression=Attr('school_code').eq(try_school),
+                Limit=1
+            )
+
+            items = response.get('Items', [])
+            if items:
+                logger.info(f"✓ SUCCESS: Found products for school {try_school} (preferred was: {school_code})")
+                recipient = items[0]
+
+                # Get school information from college-db-email
+                # IMPORTANT: Must use scan() since school_code is an attribute, not partition key
+                try:
+                    school_response = college_db_table.scan(
+                        FilterExpression=Attr('school_code').eq(try_school),
+                        Limit=1
+                    )
+                    items = school_response.get('Items', [])
+                    if items:
+                        school_info = items[0]
+                        recipient['school_name'] = school_info.get('school_name', try_school)
+                        recipient['school_logo'] = school_info.get('school_logo', '')
+                        recipient['school_page'] = school_info.get('school_page', '')
+                        logger.info(f"School info for {try_school}: {recipient['school_name']}")
+                    else:
+                        logger.warning(f"No school info found in college-db-email for {try_school}")
+                        recipient['school_name'] = try_school
+                except Exception as e:
+                    logger.error(f"Error getting school info for {try_school}: {e}")
+
+                return recipient
+
+        logger.warning(f"No products found for school {school_code} or any fallback schools")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting products for test user preview: {e}")
+        return None
+
 def preview_customer_email(event):
     """Preview what a specific customer will receive"""
     try:
@@ -1936,6 +2695,79 @@ def get_template_instance(event):
         logger.error(f"Error getting template instance: {e}")
         return cors_response(500, {'error': str(e)})
 
+def update_template_config(event):
+    """Update template configuration and re-render preview with new values"""
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]  # /api/campaigns/{campaign_id}/template-config
+
+        body = event.get('body', {})
+        if isinstance(body, str):
+            body = json.loads(body)
+
+        new_config = body.get('template_config')
+        if not new_config:
+            return cors_response(400, {'error': 'Missing template_config in request body'})
+
+        # Get current template instance
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+        if 'Item' not in response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = response['Item']
+
+        # Update config
+        template_config = template_instance.get('template_config', {})
+        template_config.update(new_config)
+
+        # Get raw template
+        template_html_raw = template_instance.get('template_html_raw')
+        if not template_html_raw:
+            # If no raw template, get the standard template
+            template_html_raw = get_standard_email_template()
+
+        # Re-render template_html with updated config
+        # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+        runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
+        template_html = template_html_raw
+        for key, value in template_config.items():
+            if key not in runtime_placeholders:
+                template_html = template_html.replace('{{' + key + '}}', str(value))
+
+        # Update template instance in DynamoDB
+        template_instances_table.update_item(
+            Key={'campaign_id': campaign_id},
+            UpdateExpression='SET template_config = :config, template_html = :html, last_modified = :modified',
+            ExpressionAttributeValues={
+                ':config': template_config,
+                ':html': template_html,
+                ':modified': datetime.now().isoformat()
+            }
+        )
+
+        logger.info(f"Updated template config for campaign {campaign_id}")
+
+        return cors_response(200, {
+            'message': 'Template configuration updated successfully',
+            'template_config': template_config,
+            'template_html': template_html
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating template config: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
 def create_template_instance(event):
     """Create a new template instance for a campaign"""
     try:
@@ -1994,21 +2826,30 @@ def create_template_instance_for_campaign(campaign_id):
             'UNSUBSCRIBE_URL': 'https://r-and-r-awss3.s3.us-east-1.amazonaws.com/unsuscribe_button.html'
         }
         
-        # Apply variables to template
+        # Create two versions:
+        # 1. template_html_raw - Keep ALL placeholders for runtime personalization
+        template_html_raw = standard_template
+
+        # 2. template_html - Render ONLY static placeholders for preview
+        # Keep runtime placeholders: GREETING_TEXT, PRODUCTS_HTML, DESCRIPTION_TEXT, PRODUCTS_TITLE, PRODUCTS_SUBTITLE, SCHOOL_PAGE, TEAM_NAME
+        runtime_placeholders = ['GREETING_TEXT', 'PRODUCTS_HTML', 'DESCRIPTION_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'SCHOOL_PAGE', 'TEAM_NAME']
+
         rendered_html = standard_template
         for key, value in template_vars.items():
-            rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
-        
+            if key not in runtime_placeholders:
+                rendered_html = rendered_html.replace('{{' + key + '}}', str(value))
+
         template_instance = {
             'campaign_id': campaign_id,
-            'template_html': rendered_html,
+            'template_html': rendered_html,  # Preview version (static placeholders replaced)
+            'template_html_raw': template_html_raw,  # Raw version (all placeholders intact)
             'template_config': template_vars,
             'version_history': [],
             'last_modified': datetime.now().isoformat(),
             'ai_chat_history': [],
             'created_at': datetime.now().isoformat()
         }
-        
+
         # Save template instance
         template_instances_table = dynamodb.Table('campaign_template_instances')
         template_instances_table.put_item(Item=template_instance)

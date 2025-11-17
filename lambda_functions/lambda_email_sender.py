@@ -82,40 +82,204 @@ def generate_email_html_from_template_instance(record, campaign_id):
             return generate_email_html_fallback(record, campaign_id)
         
         template_instance = response['Item']
-        template_html = template_instance.get('template_html', '')
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
         template_config = template_instance.get('template_config', {})
-        
-        # Personalized greeting
-        customer_name = record.get('customer_name', '')
-        greeting = f"Hi {customer_name}," if customer_name else "Hi there,"
-        
-        # School/team information
-        team = record.get('school_code', '')
-        team_text = f"Featured {team} Collection" if team else "Featured Collection"
-        
-        # Generate products HTML
-        product_count = sum(1 for i in range(1, 5) if record.get(f'product_image_{i}'))
-        products_html = generate_products_html(record, product_count, team_text)
-        
-        # Replace dynamic content in template
-        personalized_html = template_html
-        
-        # Personal replacements
-        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
-        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', team_text)
-        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
-        
-        # School-specific replacements
-        school_page = record.get('school_page', '#')
-        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
-        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
-        
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
+
+        # Personalize email using shared logic (same as preview endpoint)
+        personalized_html = generate_personalized_email_for_recipient(template_html_raw, template_config, record)
+
         return personalized_html
         
     except Exception as e:
         logger.error(f"Error generating email from template instance: {e}")
         # Fallback to old method
         return generate_email_html_fallback(record, campaign_id)
+
+def generate_personalized_email_for_recipient(template_html_raw, template_config, recipient):
+    """
+    Generate personalized HTML email for a recipient
+
+    Args:
+        template_html_raw: Raw template with {{PLACEHOLDERS}}
+        template_config: Base config from template instance (AI-generated or default)
+        recipient: Recipient data with products, school info, etc.
+    """
+    try:
+        # Start with raw template
+        personalized_html = template_html_raw
+
+        # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
+        # but SKIP fields that need per-recipient personalization
+        # IMPORTANT: We skip DESCRIPTION_TEXT because it should be personalized per recipient
+        for key, value in template_config.items():
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE', 'DESCRIPTION_TEXT']:  # Skip - we'll personalize these
+                placeholder = '{{' + key + '}}'
+                personalized_html = personalized_html.replace(placeholder, str(value))
+
+        # Step 2: Personalize greeting with recipient name
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        if recipient_name:
+            greeting = f"Hi {recipient_name},"
+        else:
+            # Fallback to AI-generated or default greeting if no name
+            greeting = template_config.get('GREETING_TEXT', 'Hi there,')
+        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+
+        # Step 3: Get school/team information
+        school_code = recipient.get('school_code', '')
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        logger.info(f"Personalizing for school_code={school_code}, team_name={team_name}")
+
+        # CRITICAL: Replace {{TEAM_NAME}} placeholder globally in the entire HTML
+        # This handles AI-generated content that uses {{TEAM_NAME}} in MAIN_TITLE, DESCRIPTION_TEXT, etc.
+        if team_name and team_name != school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', team_name)
+        elif school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', school_code)
+        else:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', 'Your Team')
+
+        # Update products title with school name (ALWAYS replace, even if no team_name)
+        if team_name and team_name != school_code:
+            products_title = f"Featured {team_name} Collection"
+        elif school_code:
+            # Fallback: still use school code if lookup failed, but mark it clearly
+            products_title = f"Featured {school_code} Collection"
+        else:
+            products_title = "Featured Collection"
+        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+
+        # Also replace PRODUCTS_SUBTITLE with school-specific text
+        if team_name and team_name != school_code:
+            products_subtitle = f"Show your {team_name} pride with these exclusive items!"
+        else:
+            products_subtitle = template_config.get('PRODUCTS_SUBTITLE', 'We\'ve selected these exclusive items just for you!')
+        personalized_html = personalized_html.replace('{{PRODUCTS_SUBTITLE}}', products_subtitle)
+
+        # Step 3b: Personalize DESCRIPTION_TEXT for this recipient's school ONLY
+        # CRITICAL: Each recipient sees ONLY their school, not multiple schools
+        if team_name and team_name != school_code:
+            # Use full school name
+            description = f"Discover exclusive {team_name} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        elif school_code:
+            # Fallback to school code if name lookup failed
+            description = f"Discover exclusive {school_code} gear designed for true fans! Show your school pride with our personalized collection. Get yours today and represent your team!"
+        else:
+            # Generic fallback
+            description = template_config.get('DESCRIPTION_TEXT', 'Discover something special just for you!')
+        personalized_html = personalized_html.replace('{{DESCRIPTION_TEXT}}', description)
+
+        # Step 4: Generate recipient-specific products HTML
+        product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
+        products_html = generate_products_html(recipient, product_count, team_name or school_code)
+        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
+
+        # Step 5: School-specific links
+        school_page = recipient.get('school_page', template_config.get('CTA_PRIMARY_LINK', '#'))
+        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{SCHOOL_PAGE}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_SECONDARY_LINK}}', school_page)
+
+        # Step 6: Replace hero image if school logo is available
+        school_logo = recipient.get('school_logo', '')
+        if school_logo:
+            personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
+
+        return personalized_html
+
+    except Exception as e:
+        logger.error(f"Error generating personalized email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return template_html_raw
+
+def get_school_name_from_code(school_code):
+    """Get school name from school code using college-db-email table
+
+    NOTE: The college-db-email table has partition key 'school_name' (the full name),
+    and 'school_code' (e.g., 'AKN') is just an attribute. We must scan the table
+    to find the school by code. This is efficient since table has <200 records.
+    """
+    try:
+        if not school_code:
+            logger.warning("get_school_name_from_code called with empty school_code")
+            return school_code
+
+        college_db_table = dynamodb.Table('college-db-email')
+        logger.info(f"Scanning college-db-email table for school_code='{school_code}'")
+
+        # Must use scan() since school_code is an attribute, not the partition key
+        response = college_db_table.scan(
+            FilterExpression=Attr('school_code').eq(school_code)
+        )
+
+        items = response.get('Items', [])
+        if items:
+            school_name = items[0].get('school_name', '')
+            logger.info(f"Found school entry: school_code='{school_code}', school_name='{school_name}'")
+
+            # If school_name is empty or same as code, log warning
+            if not school_name or school_name == school_code:
+                logger.warning(f"School entry exists but school_name is empty or equals code: school_code='{school_code}', school_name='{school_name}'")
+                return school_code
+
+            return school_name
+        else:
+            logger.warning(f"No entry found in college-db-email for school_code='{school_code}'")
+            return school_code
+
+    except Exception as e:
+        logger.error(f"Error getting school name for code '{school_code}': {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return school_code
+
+def generate_personalized_subject(base_subject, recipient):
+    """
+    Generate personalized subject line for recipient
+
+    Examples:
+        "Hi John, Michigan Journals Just Dropped!"
+        "Hi Sarah, Your Favorite Team's New Collection!"
+
+    Args:
+        base_subject: AI-generated or default subject from template
+        recipient: Recipient record with name and school info
+    """
+    try:
+        recipient_name = recipient.get('recipient_name', '') or recipient.get('customer_name', '')
+        school_code = recipient.get('school_code', '')
+
+        # Get team name if available
+        team_name = get_school_name_from_code(school_code) if school_code else ''
+
+        # Personalize subject line
+        if recipient_name and team_name:
+            # Best case: both name and team
+            # Pattern: "Hi {name}, {team} {product_category} Just Dropped!"
+            return f"Hi {recipient_name}, {team_name} Collection Just Dropped!"
+        elif recipient_name:
+            # Just name
+            return f"Hi {recipient_name}! {base_subject}"
+        elif team_name:
+            # Just team
+            return f"{team_name} {base_subject}"
+        else:
+            # Fallback to base subject
+            return base_subject
+
+    except Exception as e:
+        logger.error(f"Error generating personalized subject: {e}")
+        return base_subject
 
 def generate_products_html(record, product_count, team_text):
     """Generate HTML for products section"""
@@ -408,6 +572,79 @@ def send_email_ses(recipient, subject, html_body):
         logger.error(f"Unexpected error sending to {recipient}: {str(e)}")
         return False
 
+def get_products_for_test_user(campaign_id, school_code):
+    """
+    Get products for test user based on school code with fallback logic
+
+    Args:
+        campaign_id: Campaign ID
+        school_code: Preferred school code (e.g., 'RAD', 'ALA')
+
+    Returns:
+        Recipient record with products populated, or None if no products found
+    """
+    try:
+        campaign_data_table = dynamodb.Table('campaign_data')
+        college_db_table = dynamodb.Table('college-db-email')
+
+        # Fallback schools in order
+        FALLBACK_SCHOOLS = [
+            'ACU', 'AKN', 'ALA', 'ALB', 'ALC', 'ALS', 'APS', 'ARK', 'ARS', 'ATU',
+            'AUB', 'BALL', 'BAY', 'BGU', 'BST', 'BUT', 'BYU', 'CCU', 'CHAR', 'CHI',
+            'CHIC', 'CLE', 'CMI', 'CMP', 'CNU', 'CO', 'COL', 'CSL', 'DAV', 'DAY', 'DEL'
+        ]
+
+        # Try preferred school first, then fallbacks
+        schools_to_try = [school_code] if school_code else []
+        schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
+
+        logger.info(f"TEST USER: Searching for products - Preferred school: {school_code}, Will try in order: {schools_to_try[:5]}...")
+
+        for try_school in schools_to_try:
+            logger.info(f"TEST USER: Trying school: {try_school}")
+            # Query campaign_data for this school
+            response = campaign_data_table.query(
+                KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+                FilterExpression=Attr('school_code').eq(try_school),
+                Limit=1
+            )
+
+            items = response.get('Items', [])
+            if items:
+                logger.info(f"TEST USER: ✓ SUCCESS: Found products for school {try_school} (preferred was: {school_code})")
+                recipient = items[0]
+
+                # Get school information from college-db-email
+                # IMPORTANT: Must use scan() since school_code is an attribute, not partition key
+                try:
+                    school_response = college_db_table.scan(
+                        FilterExpression=Attr('school_code').eq(try_school),
+                        Limit=1
+                    )
+                    school_items = school_response.get('Items', [])
+                    if school_items:
+                        school_info = school_items[0]
+                        recipient['school_name'] = school_info.get('school_name', try_school)
+                        recipient['school_logo'] = school_info.get('school_logo', '')
+                        recipient['school_page'] = school_info.get('school_page', '')
+                        logger.info(f"TEST USER: School info for {try_school}: {recipient['school_name']}")
+                    else:
+                        logger.warning(f"TEST USER: No school info found in college-db-email for {try_school}")
+                        recipient['school_name'] = try_school
+                except Exception as e:
+                    logger.error(f"TEST USER: Error getting school info for {try_school}: {e}")
+
+                return recipient
+            else:
+                logger.info(f"TEST USER: No products found for {try_school}, trying next...")
+
+        logger.warning(f"No products found for school {school_code} or any fallback schools")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting products for test user: {e}")
+        return None
+
 def send_batch_emails(campaign_id, batch_number, is_test=False):
     """Send emails for a specific batch with safety checks"""
     try:
@@ -471,23 +708,40 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
             response = test_users_table.scan(
                 FilterExpression=Attr('active').eq(True)
             )
-            records = response.get('Items', [])
-            
-            # Convert test users to campaign data format
+            test_users = response.get('Items', [])
+
+            # Convert test users to campaign data format with actual products
             test_records = []
-            for user in records:
-                test_records.append({
-                    'campaign_id': campaign_id,
-                    'record_id': f"test_{user['email']}",
-                    'customer_email': user['email'],
-                    'customer_name': user['name'],
-                    'school_code': user.get('school_code', 'TEST'),
-                    'email_sent': False,
-                    'product_link_1': 'https://www.rrinconline.com/products/test-product',
-                    'product_image_1': 'https://via.placeholder.com/300x300?text=Test+Product',
-                    'product_name_1': 'Test Product',
-                    'product_price_1': '19.99'
-                })
+            for user in test_users:
+                # Get products for this test user's school
+                school_code = user.get('school_code', '')
+                recipient_data = get_products_for_test_user(campaign_id, school_code)
+
+                if recipient_data:
+                    # Override recipient data with test user info
+                    recipient_data['customer_email'] = user['email']
+                    recipient_data['recipient_name'] = user['name']
+                    recipient_data['customer_name'] = user['name']
+                    recipient_data['record_id'] = f"test_{user['email']}"
+                    recipient_data['email_sent'] = False
+
+                    test_records.append(recipient_data)
+                else:
+                    # Fallback to placeholder if no products found
+                    logger.warning(f"No products found for test user {user['email']} (school: {school_code}), using placeholder")
+                    test_records.append({
+                        'campaign_id': campaign_id,
+                        'record_id': f"test_{user['email']}",
+                        'customer_email': user['email'],
+                        'customer_name': user['name'],
+                        'recipient_name': user['name'],
+                        'school_code': school_code,
+                        'email_sent': False,
+                        'product_link_1': 'https://www.rrinconline.com/products/test-product',
+                        'product_image_1': 'https://via.placeholder.com/300x300?text=Test+Product',
+                        'product_name_1': 'Test Product',
+                        'product_price_1': '19.99'
+                    })
             records = test_records
         else:
             # Get actual campaign data for this batch
@@ -515,25 +769,35 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
         emails_sent = 0
         failed_emails = 0
         start_time = datetime.now()
-        
-        # Generate email subject
-        subject = template_config.get('subject', f"{template_config.get('main_title', 'New Collection')} - Don't Miss Out!")
-        
+
+        # Get template instance for subject line generation
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
+
+        template_instance = template_response.get('Item', {}) if 'Item' in template_response else {}
+        template_config = template_instance.get('template_config', {})
+
+        # Base subject line (will be personalized per recipient)
+        base_subject = template_config.get('CAMPAIGN_TITLE', 'New Collection Available!')
+
         for i, record in enumerate(records):
             # Check timeout
             elapsed_minutes = (datetime.now() - start_time).total_seconds() / 60
             if elapsed_minutes >= BATCH_TIMEOUT_MINUTES:
                 logger.warning(f"Batch timeout reached after {elapsed_minutes:.1f} minutes")
                 break
-            
+
+            # Generate personalized subject line like: "Hi John, Michigan Journals Just Dropped!"
+            subject = generate_personalized_subject(base_subject, record)
+
             # Generate personalized email using new template instance method
             html_content = generate_email_html_from_template_instance(record, campaign_id)
-            
+
             if not html_content:
                 logger.error(f"Failed to generate email for {record['customer_email']}")
                 failed_emails += 1
                 continue
-            
+
             # Send email
             if send_email_ses(record['customer_email'], subject, html_content):
                 emails_sent += 1

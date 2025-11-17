@@ -102,6 +102,84 @@ def call_openai_api(messages, system_prompt="", max_tokens=4000, temperature=0.7
         logger.error(f"Error calling OpenAI API: {str(e)}")
         raise
 
+def call_claude_api(messages, system_prompt="", max_tokens=4000, temperature=0.7):
+    """
+    Call Anthropic Claude API using pure REST (no dependencies)
+    """
+    if not CLAUDE_API_KEY:
+        raise Exception("CLAUDE_API_KEY environment variable not set")
+
+    url = 'https://api.anthropic.com/v1/messages'
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01'
+    }
+
+    # Claude expects messages in a specific format (no system in messages array)
+    formatted_messages = []
+    for msg in messages:
+        formatted_messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+
+    payload = {
+        'model': 'claude-3-5-sonnet-20241022',  # Latest Claude 3.5 Sonnet
+        'max_tokens': max_tokens,
+        'temperature': temperature,
+        'messages': formatted_messages
+    }
+
+    # Add system prompt if provided
+    if system_prompt:
+        payload['system'] = system_prompt
+
+    try:
+        req = request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+
+        with request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result['content'][0]['text']
+
+    except error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        logger.error(f"Claude API Error: {e.code} - {error_body}")
+        raise Exception(f"Claude API request failed: {error_body}")
+    except Exception as e:
+        logger.error(f"Error calling Claude API: {str(e)}")
+        raise
+
+def call_ai_api(messages, system_prompt="", max_tokens=4000, temperature=0.7):
+    """
+    Smart AI router - tries Claude first (if available), then OpenAI
+    """
+    # Try Claude first (preferred)
+    if CLAUDE_API_KEY:
+        try:
+            logger.info("Using Claude API for AI processing")
+            return call_claude_api(messages, system_prompt, max_tokens, temperature)
+        except Exception as e:
+            logger.warning(f"Claude API failed, trying OpenAI: {e}")
+            # Fall through to OpenAI
+
+    # Try OpenAI as fallback
+    if OPENAI_API_KEY:
+        try:
+            logger.info("Using OpenAI API for AI processing")
+            return call_openai_api(messages, system_prompt, max_tokens, temperature)
+        except Exception as e:
+            logger.error(f"OpenAI API also failed: {e}")
+            raise
+
+    # No API keys available
+    raise Exception("No AI API keys configured. Please set CLAUDE_API_KEY or OPENAI_API_KEY environment variable.")
+
 def get_standard_email_template():
     """
     Returns the standardized email template based on hats_campaign.py
@@ -161,6 +239,13 @@ img { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-
 </p>
 </td></tr>
 
+<!-- PRIMARY CTA SECTION (Shop the Collection) - ABOVE PRODUCTS -->
+<tr id="cta-primary-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
+<a href="{{CTA_PRIMARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_PRIMARY_BG_COLOR}}; color:{{CTA_PRIMARY_TEXT_COLOR}}; padding:16px 32px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:18px; font-weight:bold;">
+{{CTA_PRIMARY_TEXT}}
+</a>
+</td></tr>
+
 <!-- PRODUCTS SECTION -->
 <tr id="products-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
 <h2 style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:24px; font-weight:bold; color:#000000; margin:0 0 10px 0;">
@@ -179,10 +264,10 @@ img { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-
 
 </td></tr>
 
-<!-- CTA SECTION -->
-<tr id="cta-section"><td style="background-color:#ffffff; padding:12px 24px; text-align:center;">
-<a href="{{CTA_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_BG_COLOR}}; color:{{CTA_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
-{{CTA_TEXT}}
+<!-- SECONDARY CTA SECTION (Shop Your Team's Collection) - BELOW PRODUCTS -->
+<tr id="cta-secondary-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
+<a href="{{CTA_SECONDARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_SECONDARY_BG_COLOR}}; color:{{CTA_SECONDARY_TEXT_COLOR}}; padding:16px 32px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:18px; font-weight:bold;">
+{{CTA_SECONDARY_TEXT}}
 </a>
 </td></tr>
 
@@ -239,6 +324,17 @@ def get_default_template_config():
         'PRODUCTS_TITLE': 'Featured Collection',
         'PRODUCTS_SUBTITLE': 'We\'ve selected these exclusive items just for you!',
         'PRODUCTS_HTML': '<!-- Products will be dynamically inserted here -->',
+        # Primary CTA Button (Shop the Collection)
+        'CTA_PRIMARY_TEXT': 'Shop the Collection',
+        'CTA_PRIMARY_LINK': 'https://www.rrinconline.com',
+        'CTA_PRIMARY_BG_COLOR': '#7ac4c9',
+        'CTA_PRIMARY_TEXT_COLOR': '#000000',
+        # Secondary CTA Button (Shop your Team's Collection - personalized per recipient)
+        'CTA_SECONDARY_TEXT': 'Shop Your Team\'s Collection',
+        'CTA_SECONDARY_LINK': '{{SCHOOL_PAGE}}',  # Will be replaced per recipient
+        'CTA_SECONDARY_BG_COLOR': '#000000',
+        'CTA_SECONDARY_TEXT_COLOR': '#ffffff',
+        # Legacy CTA fields (for backwards compatibility)
         'CTA_TEXT': 'Shop Collection',
         'CTA_LINK': '#',
         'CTA_BG_COLOR': '#7ac4c9',
@@ -310,7 +406,7 @@ def apply_template_config(template_html, config):
 
 def advanced_ai_processor(user_request, current_config, current_html):
     """
-    Handle complex AI requests using OpenAI
+    Handle complex AI requests using Claude or OpenAI
     Returns: (success: bool, updated_config: dict, updated_html: str, explanation: str)
     """
     system_prompt = """You are an expert email template designer. You can modify email templates based on user requests.
@@ -326,10 +422,17 @@ AVAILABLE TEMPLATE VARIABLES:
 - DESCRIPTION_TEXT: Main description paragraph
 - PRODUCTS_TITLE: Products section title
 - PRODUCTS_SUBTITLE: Products section subtitle
-- CTA_TEXT: Call-to-action button text
-- CTA_BG_COLOR: Button background color
-- CTA_TEXT_COLOR: Button text color
-- CTA_LINK: Button link destination
+- CTA_PRIMARY_TEXT: Primary CTA button text (Shop the Collection)
+- CTA_PRIMARY_LINK: Primary CTA button link
+- CTA_PRIMARY_BG_COLOR: Primary button background color
+- CTA_PRIMARY_TEXT_COLOR: Primary button text color
+- CTA_SECONDARY_TEXT: Secondary CTA button text (Shop Your Team's Collection)
+- CTA_SECONDARY_BG_COLOR: Secondary button background color
+- CTA_SECONDARY_TEXT_COLOR: Secondary button text color
+- CTA_TEXT: Legacy button text (for backwards compatibility)
+- CTA_BG_COLOR: Legacy button background color
+- CTA_TEXT_COLOR: Legacy button text color
+- CTA_LINK: Legacy button link destination
 
 RULES:
 1. Make ONLY the requested changes
@@ -357,7 +460,7 @@ User request: {user_request}
 Please provide the necessary changes to fulfill this request."""
 
     try:
-        response_text = call_openai_api(
+        response_text = call_ai_api(
             messages=[{"role": "user", "content": user_message}],
             system_prompt=system_prompt,
             temperature=0.3,
@@ -447,55 +550,306 @@ def handle_health_check():
         'claude_configured': bool(CLAUDE_API_KEY)
     })
 
+def analyze_campaign_products(campaign_id):
+    """Analyze campaign products to understand what's being promoted"""
+    try:
+        # Get a sample of campaign data to analyze products
+        campaign_data_table = dynamodb.Table('campaign_data')
+        response = campaign_data_table.query(
+            KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+            Limit=10  # Sample first 10 records
+        )
+
+        records = response.get('Items', [])
+        if not records:
+            return None
+
+        # Extract product information
+        product_names = []
+        school_codes = set()
+        sample_products = []
+
+        for record in records:
+            school_codes.add(record.get('school_code', ''))
+            for i in range(1, 5):
+                product_name = record.get(f'product_name_{i}', '')
+                if product_name:
+                    product_names.append(product_name)
+                    if len(sample_products) < 3:
+                        sample_products.append({
+                            'name': product_name,
+                            'price': record.get(f'product_price_{i}', ''),
+                            'image': record.get(f'product_image_{i}', '')
+                        })
+
+        # Get campaign details
+        campaigns_table = dynamodb.Table('email_campaigns')
+        campaign_response = campaigns_table.get_item(Key={'campaign_id': campaign_id})
+        campaign = campaign_response.get('Item', {})
+
+        return {
+            'product_names': product_names[:10],  # First 10 product names
+            'school_codes': list(school_codes)[:5],  # First 5 schools
+            'sample_products': sample_products,
+            'campaign_name': campaign.get('campaign_name', ''),
+            'total_products': len(product_names),
+            'total_schools': len(school_codes)
+        }
+
+    except Exception as e:
+        logger.error(f"Error analyzing campaign products: {e}")
+        return None
+
+def generate_sample_products_html_for_preview(sample_products):
+    """Generate sample products HTML for template preview in editor"""
+    if not sample_products or len(sample_products) == 0:
+        return '<!-- No products available for preview -->'
+
+    product_count = len(sample_products)
+
+    if product_count == 1:
+        # Single product layout
+        product = sample_products[0]
+        return f'''
+<td width="100%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="#" target="_blank">
+<img src="{product.get('image', '')}" alt="{product.get('name', 'Product')}" style="display:block;border:0;max-width:300px;max-height:300px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#333333;margin:0 0 5px 0;">{product.get('name', '')}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:20px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product.get('price', '0.00')}</p>
+<a href="#" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+    else:
+        # Multiple products layout (2-column grid)
+        products_per_row = 2
+        width_percent = 50
+
+        products_html = ''
+        for i, product in enumerate(sample_products[:4]):  # Max 4 products
+            product_image = product.get('image', '')
+            product_name = product.get('name', '')
+            product_price = product.get('price', '0.00')
+
+            if product_image:
+                products_html += f'''
+<td width="{width_percent}%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="#" target="_blank">
+<img src="{product_image}" alt="{product_name}" style="display:block;border:0;max-width:250px;max-height:250px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:14px;color:#333333;margin:0 0 5px 0;">{product_name}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:18px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product_price}</p>
+<a href="#" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:8px 16px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:12px;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+                # Start new row after 2 products
+                if (i + 1) % 2 == 0 and (i + 1) < len(sample_products[:4]):
+                    products_html += "</tr><tr>"
+
+        return products_html
+
+def generate_ai_campaign_metadata(campaign_analysis):
+    """Use AI to generate compelling campaign metadata based on products"""
+    try:
+        if not campaign_analysis or not OPENAI_API_KEY:
+            return None
+
+        system_prompt = """You are an expert email marketing copywriter specializing in collegiate merchandise and fan gear.
+Generate compelling email campaign content that drives engagement and sales.
+
+GUIDELINES:
+- Create attention-grabbing headlines that speak to college pride
+- Use action-oriented, enthusiastic language
+- Keep descriptions concise but compelling (2-3 sentences max)
+- Make CTAs clear and action-driven
+- Reference specific product types when possible
+- Create personalized, enthusiastic greetings
+
+OUTPUT FORMAT (JSON):
+{
+  "campaign_title": "Email subject line (max 60 chars)",
+  "main_title": "Bold headline for email body (max 50 chars)",
+  "greeting": "Personalized greeting text (e.g., 'Hi there! We found something perfect for you.')",
+  "description": "2-3 sentence description highlighting the products",
+  "cta_text": "Call-to-action button text (max 25 chars)",
+  "products_title": "Products section headline",
+  "products_subtitle": "Products section subheadline"
+}"""
+
+        product_summary = ""
+        if campaign_analysis.get('sample_products'):
+            product_summary = "Sample Products:\n"
+            for p in campaign_analysis['sample_products'][:3]:
+                product_summary += f"- {p['name']} (${p['price']})\n"
+
+        schools_list = ", ".join(campaign_analysis.get('school_codes', [])[:3])
+
+        user_message = f"""Campaign: {campaign_analysis.get('campaign_name', 'New Collection')}
+Number of Products: {campaign_analysis.get('total_products', 0)}
+Schools Featured: {schools_list} (and {campaign_analysis.get('total_schools', 0) - 3} more)
+
+{product_summary}
+
+Generate engaging email campaign content for this collegiate merchandise collection."""
+
+        response_text = call_openai_api(
+            messages=[{"role": "user", "content": user_message}],
+            system_prompt=system_prompt,
+            temperature=0.7,
+            max_tokens=800
+        )
+
+        # Extract JSON from response
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            metadata = json.loads(json_match.group(0))
+            logger.info(f"Generated AI metadata: {metadata}")
+            return metadata
+
+        logger.warning("Could not extract JSON from AI response")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error generating AI metadata: {e}")
+        return None
+
 def handle_create_template_instance(event):
-    """Create a new template instance for a campaign"""
+    """Create a new template instance for a campaign with AI-generated metadata"""
     try:
         # Extract campaign_id from path
         if 'rawPath' in event:
             path = event['rawPath']
         else:
             path = event.get('path', '')
-            
+
         path_parts = path.split('/')
         campaign_id = path_parts[3]
-        
+
         body = event.get('body', {})
         if isinstance(body, str):
             body = json.loads(body)
-        
+
         # Get default template and config
         template_html = get_standard_email_template()
         template_config = get_default_template_config()
-        
-        # Override with any provided config
+
+        # Analyze campaign products and generate AI metadata
+        logger.info(f"Analyzing campaign products for: {campaign_id}")
+        campaign_analysis = analyze_campaign_products(campaign_id)
+
+        # Track if we successfully generated AI content
+        ai_generation_successful = False
+
+        if campaign_analysis:
+            logger.info(f"Campaign analysis: {campaign_analysis.get('total_products', 0)} products, {campaign_analysis.get('total_schools', 0)} schools")
+
+            # Generate sample products HTML for preview
+            sample_products = campaign_analysis.get('sample_products', [])
+            if sample_products:
+                sample_products_html = generate_sample_products_html_for_preview(sample_products)
+                template_config['PRODUCTS_HTML'] = sample_products_html
+                logger.info(f"Generated sample products HTML for {len(sample_products)} products")
+            else:
+                logger.warning("No sample products found, using default placeholder")
+
+            # Generate AI-powered metadata
+            ai_metadata = generate_ai_campaign_metadata(campaign_analysis)
+
+            if ai_metadata:
+                # IMPORTANT: Only use AI values if they're not empty strings
+                # DynamoDB doesn't handle empty strings well, and we want meaningful defaults
+                if ai_metadata.get('campaign_title') and ai_metadata['campaign_title'].strip():
+                    template_config['CAMPAIGN_TITLE'] = ai_metadata['campaign_title']
+                if ai_metadata.get('main_title') and ai_metadata['main_title'].strip():
+                    template_config['MAIN_TITLE'] = ai_metadata['main_title']
+                if ai_metadata.get('greeting') and ai_metadata['greeting'].strip():
+                    template_config['GREETING_TEXT'] = ai_metadata['greeting']
+                if ai_metadata.get('description') and ai_metadata['description'].strip():
+                    template_config['DESCRIPTION_TEXT'] = ai_metadata['description']
+                if ai_metadata.get('cta_text') and ai_metadata['cta_text'].strip():
+                    template_config['CTA_TEXT'] = ai_metadata['cta_text']
+                if ai_metadata.get('products_title') and ai_metadata['products_title'].strip():
+                    template_config['PRODUCTS_TITLE'] = ai_metadata['products_title']
+                if ai_metadata.get('products_subtitle') and ai_metadata['products_subtitle'].strip():
+                    template_config['PRODUCTS_SUBTITLE'] = ai_metadata['products_subtitle']
+
+                logger.info(f"Applied AI-generated metadata: {list(ai_metadata.keys())}")
+                ai_generation_successful = True
+            else:
+                logger.warning("AI generation failed, using default metadata")
+        else:
+            logger.warning("No campaign data found, using default metadata")
+
+        # Override with any provided config from request body
         if 'template_config' in body:
             template_config.update(body['template_config'])
-        
-        # Apply config to template
-        rendered_html = apply_template_config(template_html, template_config)
-        
+
+        # CRITICAL: Validate that all required config values are non-empty
+        required_fields = ['CAMPAIGN_TITLE', 'MAIN_TITLE', 'DESCRIPTION_TEXT', 'CTA_TEXT']
+        for field in required_fields:
+            if not template_config.get(field) or not str(template_config[field]).strip():
+                default_config = get_default_template_config()
+                template_config[field] = default_config[field]
+                logger.warning(f"Field {field} was empty, using default: {default_config[field]}")
+
+        # Log final config for debugging
+        logger.info(f"Final template_config keys: {list(template_config.keys())}")
+        logger.info(f"MAIN_TITLE: {template_config.get('MAIN_TITLE', 'MISSING')}")
+        logger.info(f"DESCRIPTION_TEXT length: {len(template_config.get('DESCRIPTION_TEXT', ''))}")
+
+        # For editor preview: Apply config to template (including sample products)
+        # But keep original template with placeholders for per-recipient personalization
+        editor_preview_html = apply_template_config(template_html, template_config)
+
+        # Verify template was rendered correctly
+        if '{{MAIN_TITLE}}' in editor_preview_html:
+            logger.error("MAIN_TITLE placeholder still exists in rendered template!")
+        if '<!-- Products will be dynamically inserted here -->' in editor_preview_html:
+            logger.warning("Products placeholder comment still exists in rendered template")
+
+        # IMPORTANT: Store raw template for per-recipient personalization
+        # We need to keep placeholders like {{PRODUCTS_HTML}}, {{GREETING_TEXT}}, etc.
+        # so we can replace them with recipient-specific data at send time
+
         # Create template instance
         template_instances_table = dynamodb.Table('campaign_template_instances')
         template_instance = {
             'campaign_id': campaign_id,
-            'template_html': rendered_html,
+            'template_html_raw': template_html,  # Raw template with {{PLACEHOLDERS}}
+            'template_html': editor_preview_html,  # Preview for editor (with sample products)
             'template_config': template_config,
             'version_history': [],
             'last_modified': datetime.now().isoformat(),
             'ai_chat_history': [],
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'ai_generated': ai_generation_successful and bool(campaign_analysis),
+            'campaign_analysis': campaign_analysis if campaign_analysis else {}
         }
-        
+
         template_instances_table.put_item(Item=template_instance)
-        
-        logger.info(f"Created template instance for campaign: {campaign_id}")
+
+        logger.info(f"Created template instance for campaign: {campaign_id} (AI-generated: {template_instance['ai_generated']})")
         return cors_response(201, {
             'message': 'Template instance created successfully',
-            'template_instance': template_instance
+            'template_instance': template_instance,
+            'ai_generated': template_instance['ai_generated']
         })
-        
+
     except Exception as e:
         logger.error(f"Error creating template instance: {e}")
+        logger.error(traceback.format_exc())
         return cors_response(500, {'error': str(e)})
 
 def handle_get_template_instance(event):
@@ -512,12 +866,49 @@ def handle_get_template_instance(event):
         
         template_instances_table = dynamodb.Table('campaign_template_instances')
         response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
-        
+
         if 'Item' not in response:
             # Create default template instance if none exists
+            logger.info(f"No template instance found for {campaign_id}, creating new one")
             return handle_create_template_instance(event)
-        
-        return cors_response(200, {'template_instance': response['Item']})
+
+        template_instance = response['Item']
+
+        # VALIDATION: Check if template instance is broken (has empty required fields)
+        template_config = template_instance.get('template_config', {})
+        template_html = template_instance.get('template_html', '')
+
+        # Check if critical fields are missing or empty
+        is_broken = False
+        reasons = []
+
+        if not template_config.get('MAIN_TITLE') or not str(template_config['MAIN_TITLE']).strip():
+            is_broken = True
+            reasons.append("MAIN_TITLE is empty")
+
+        if not template_config.get('DESCRIPTION_TEXT') or not str(template_config['DESCRIPTION_TEXT']).strip():
+            is_broken = True
+            reasons.append("DESCRIPTION_TEXT is empty")
+
+        if '{{MAIN_TITLE}}' in template_html:
+            is_broken = True
+            reasons.append("Placeholders not replaced in template_html")
+
+        if '<!-- Products will be dynamically inserted here -->' in template_html:
+            # This is OK for editor if no campaign data, but log it
+            logger.warning(f"Template has product placeholder comment for campaign {campaign_id}")
+
+        # If template is broken, recreate it
+        if is_broken:
+            logger.warning(f"Template instance for {campaign_id} is broken: {', '.join(reasons)}. Recreating...")
+
+            # Delete the broken instance
+            template_instances_table.delete_item(Key={'campaign_id': campaign_id})
+
+            # Create a new one
+            return handle_create_template_instance(event)
+
+        return cors_response(200, {'template_instance': template_instance})
         
     except Exception as e:
         logger.error(f"Error getting template instance: {e}")
@@ -590,12 +981,16 @@ def handle_ai_edit_template(event):
         if len(version_history) > 50:
             version_history = version_history[-50:]
         
-        # Update template instance
+        # Get raw template (with placeholders)
+        raw_template = get_standard_email_template()
+
+        # Update template instance - store both raw and rendered versions
         template_instances_table.update_item(
             Key={'campaign_id': campaign_id},
-            UpdateExpression='SET template_html = :html, template_config = :config, version_history = :history, last_modified = :modified',
+            UpdateExpression='SET template_html = :html, template_html_raw = :raw, template_config = :config, version_history = :history, last_modified = :modified',
             ExpressionAttributeValues={
-                ':html': updated_html,
+                ':html': updated_html,  # For editor preview
+                ':raw': raw_template,   # For per-recipient personalization
                 ':config': updated_config,
                 ':history': version_history,
                 ':modified': datetime.now().isoformat()
