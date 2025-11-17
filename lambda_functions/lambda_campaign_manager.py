@@ -2446,7 +2446,7 @@ def restore_template_version(event):
 def preview_test_user_email(event):
     """
     Generate preview using test user data - shows EXACTLY what test emails will look like
-    Uses first active test user (Arturo with RAD school) or Ramon with ALA school
+    Uses specified test user (via query param) or first active test user
     Includes real products and full personalization
     """
     try:
@@ -2459,14 +2459,27 @@ def preview_test_user_email(event):
         path_parts = path.split('/')
         campaign_id = path_parts[3]
 
-        logger.info(f"Generating test user preview for campaign {campaign_id}")
+        # Check if specific test user requested via query parameter
+        query_params = event.get('queryStringParameters') or {}
+        requested_email = query_params.get('test_user_email', '')
 
-        # Get first active test user from test_users table
+        logger.info(f"Generating test user preview for campaign {campaign_id}, requested: {requested_email}")
+
+        # Get test users from test_users table
         test_users_table = dynamodb.Table('test_users')
-        response = test_users_table.scan(
-            FilterExpression=Attr('active').eq(True),
-            Limit=1
-        )
+
+        if requested_email:
+            # Get specific test user
+            response = test_users_table.scan(
+                FilterExpression=Attr('email').eq(requested_email) & Attr('active').eq(True),
+                Limit=1
+            )
+        else:
+            # Get first active test user
+            response = test_users_table.scan(
+                FilterExpression=Attr('active').eq(True),
+                Limit=1
+            )
 
         test_users = response.get('Items', [])
         if not test_users:
@@ -2565,14 +2578,22 @@ def get_products_for_test_user_preview(campaign_id, school_code):
                 recipient = items[0]
 
                 # Get school information from college-db-email
+                # IMPORTANT: Must use scan() since school_code is an attribute, not partition key
                 try:
-                    school_response = college_db_table.get_item(Key={'school_code': try_school})
-                    if 'Item' in school_response:
-                        school_info = school_response['Item']
+                    school_response = college_db_table.scan(
+                        FilterExpression=Attr('school_code').eq(try_school),
+                        Limit=1
+                    )
+                    items = school_response.get('Items', [])
+                    if items:
+                        school_info = items[0]
                         recipient['school_name'] = school_info.get('school_name', try_school)
                         recipient['school_logo'] = school_info.get('school_logo', '')
                         recipient['school_page'] = school_info.get('school_page', '')
-                        logger.info(f"School info: {recipient['school_name']}")
+                        logger.info(f"School info for {try_school}: {recipient['school_name']}")
+                    else:
+                        logger.warning(f"No school info found in college-db-email for {try_school}")
+                        recipient['school_name'] = try_school
                 except Exception as e:
                     logger.error(f"Error getting school info for {try_school}: {e}")
 

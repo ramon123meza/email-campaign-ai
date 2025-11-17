@@ -43,6 +43,7 @@ function CampaignEditor() {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [testEmailsStatus, setTestEmailsStatus] = useState(null)
   const [uploadingHero, setUploadingHero] = useState(false)
+  const [selectedTestUserEmail, setSelectedTestUserEmail] = useState(null)
 
   const canvasRef = useRef(null)
   const heroImageInputRef = useRef(null)
@@ -62,10 +63,16 @@ function CampaignEditor() {
     enabled: !!id,
   })
 
+  // Fetch all test users for dropdown
+  const { data: testUsers } = useQuery({
+    queryKey: ['test-users'],
+    queryFn: () => campaignAPI.getTestUsers(),
+  })
+
   // Fetch test user preview (shows real test user data with products)
   const { data: testPreviewData, isLoading: testPreviewLoading, refetch: refetchTestPreview } = useQuery({
-    queryKey: ['test-preview', id],
-    queryFn: () => campaignAPI.getTestPreview(id),
+    queryKey: ['test-preview', id, selectedTestUserEmail],
+    queryFn: () => campaignAPI.getTestPreview(id, selectedTestUserEmail),
     enabled: !!id,
   })
 
@@ -529,19 +536,42 @@ function CampaignEditor() {
             <div className="flex-1 p-6">
               {activeTab === 'preview' ? (
                 <>
-                  {/* Test User Preview Badge */}
+                  {/* Test User Selector Dropdown */}
                   {templateInstance?.test_user_info && (
-                    <div className="mb-4 p-3 bg-accent-blue/10 border border-accent-blue/30 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-accent-blue" />
-                        <span className="text-sm text-primary font-medium">
-                          Previewing as: {templateInstance.test_user_info.name}
-                        </span>
-                        <span className="text-xs text-secondary">
-                          ({templateInstance.test_user_info.school_name || templateInstance.test_user_info.school_code})
-                        </span>
-                        <span className="text-xs text-muted ml-auto">
-                          This is exactly what {templateInstance.test_user_info.name} will receive in test emails
+                    <div className="mb-4 p-4 bg-accent-blue/10 border border-accent-blue/30 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <Eye className="w-5 h-5 text-accent-blue flex-shrink-0" />
+
+                        <div className="flex-1">
+                          <label className="block text-xs text-muted mb-1">
+                            Preview as Test User:
+                          </label>
+                          <select
+                            value={selectedTestUserEmail || templateInstance.test_user_info.email}
+                            onChange={(e) => setSelectedTestUserEmail(e.target.value || null)}
+                            className="w-full bg-dark-secondary text-primary border border-dark-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          >
+                            {testUsers?.test_users?.filter(u => u.active).map(user => (
+                              <option key={user.email} value={user.email}>
+                                {user.name} ({user.school_code}) - {user.email}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-sm text-primary font-medium">
+                            {templateInstance.test_user_info.school_name || templateInstance.test_user_info.school_code}
+                          </div>
+                          <div className="text-xs text-muted">
+                            School: {templateInstance.test_user_info.school_code}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-muted flex items-center space-x-2">
+                        <TestTube className="w-3 h-3" />
+                        <span>
+                          This preview shows EXACTLY what <strong className="text-primary">{templateInstance.test_user_info.name}</strong> will receive in test emails with their products
                         </span>
                       </div>
                     </div>

@@ -156,8 +156,10 @@ export const campaignAPI = {
     campaignApi.get(`/api/campaigns/${campaignId}/preview/${recordId}`),
 
   // Test user preview (shows real test user data with products)
-  getTestPreview: (campaignId) =>
-    campaignApi.get(`/api/campaigns/${campaignId}/test-preview`),
+  getTestPreview: (campaignId, testUserEmail = null) => {
+    const params = testUserEmail ? `?test_user_email=${encodeURIComponent(testUserEmail)}` : ''
+    return campaignApi.get(`/api/campaigns/${campaignId}/test-preview${params}`)
+  },
 
   // Colleges
   getColleges: () => campaignApi.get('/api/colleges'),
