@@ -1429,9 +1429,11 @@ def generate_personalized_email(template_html_raw, template_config, recipient):
         personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
 
         # Step 5: School-specific links (from college-db-email table if available)
-        school_page = recipient.get('school_page', template_config.get('CTA_LINK', '#'))
+        school_page = recipient.get('school_page', template_config.get('CTA_PRIMARY_LINK', '#'))
         personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
         personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{SCHOOL_PAGE}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_SECONDARY_LINK}}', school_page)
 
         # Step 6: Replace hero image if school logo is available
         school_logo = recipient.get('school_logo', '')

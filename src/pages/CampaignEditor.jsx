@@ -16,7 +16,9 @@ import {
   TestTube,
   CheckCircle,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Upload,
+  Image
 } from 'lucide-react'
 import { campaignAPI, emailAPI } from '../utils/api'
 import { useToast } from '../components/common/Toast'
@@ -40,8 +42,10 @@ function CampaignEditor() {
   const [chatHistory, setChatHistory] = useState([])
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [testEmailsStatus, setTestEmailsStatus] = useState(null)
+  const [uploadingHero, setUploadingHero] = useState(false)
 
   const canvasRef = useRef(null)
+  const heroImageInputRef = useRef(null)
 
   // Fetch campaign data
   const { data: campaign, isLoading: campaignLoading, error: campaignError } = useQuery({
@@ -134,6 +138,21 @@ function CampaignEditor() {
     }
   })
 
+  // Hero image upload mutation
+  const heroImageMutation = useMutation({
+    mutationFn: (imageData) => campaignAPI.uploadHeroImage(id, imageData),
+    onSuccess: (data) => {
+      toast.success('Hero image uploaded successfully!')
+      refetchTemplate()
+      setUploadingHero(false)
+    },
+    onError: (error) => {
+      console.error('Error uploading hero image:', error)
+      toast.error('Failed to upload hero image')
+      setUploadingHero(false)
+    }
+  })
+
   useEffect(() => {
     if (templateData?.template_instance) {
       setTemplateInstance(templateData.template_instance)
@@ -201,6 +220,54 @@ function CampaignEditor() {
 
   const handleSendTest = () => {
     sendTestMutation.mutate(id)
+  }
+
+  const handleHeroImageUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be smaller than 5MB')
+      return
+    }
+
+    setUploadingHero(true)
+
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const base64String = e.target.result.split(',')[1]
+
+        const imageData = {
+          image_content: base64String,
+          file_name: file.name,
+          content_type: file.type
+        }
+
+        heroImageMutation.mutate(imageData)
+      } catch (error) {
+        console.error('Error processing image:', error)
+        toast.error('Failed to process image')
+        setUploadingHero(false)
+      }
+    }
+
+    reader.onerror = () => {
+      toast.error('Failed to read image file')
+      setUploadingHero(false)
+    }
+
+    reader.readAsDataURL(file)
+
+    // Reset input
+    event.target.value = ''
   }
 
   if (campaignLoading || templateLoading) {
@@ -286,6 +353,33 @@ function CampaignEditor() {
             </div>
             
             {/* Action Buttons */}
+            <input
+              type="file"
+              ref={heroImageInputRef}
+              onChange={handleHeroImageUpload}
+              accept="image/*"
+              className="hidden"
+            />
+
+            <button
+              onClick={() => heroImageInputRef.current?.click()}
+              disabled={uploadingHero}
+              className="btn-secondary flex items-center space-x-2"
+              title="Upload Hero Image"
+            >
+              {uploadingHero ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <Image className="w-4 h-4" />
+                  <span>Hero Image</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={handleSendTest}
               disabled={sendTestMutation.isPending || testEmailsStatus === 'sending'}

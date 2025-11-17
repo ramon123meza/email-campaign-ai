@@ -146,9 +146,11 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
 
         # Step 5: School-specific links
-        school_page = recipient.get('school_page', template_config.get('CTA_LINK', '#'))
+        school_page = recipient.get('school_page', template_config.get('CTA_PRIMARY_LINK', '#'))
         personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
         personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{SCHOOL_PAGE}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_SECONDARY_LINK}}', school_page)
 
         # Step 6: Replace hero image if school logo is available
         school_logo = recipient.get('school_logo', '')
@@ -506,6 +508,65 @@ def send_email_ses(recipient, subject, html_body):
         logger.error(f"Unexpected error sending to {recipient}: {str(e)}")
         return False
 
+def get_products_for_test_user(campaign_id, school_code):
+    """
+    Get products for test user based on school code with fallback logic
+
+    Args:
+        campaign_id: Campaign ID
+        school_code: Preferred school code (e.g., 'RAD', 'ALA')
+
+    Returns:
+        Recipient record with products populated, or None if no products found
+    """
+    try:
+        campaign_data_table = dynamodb.Table('campaign_data')
+        college_db_table = dynamodb.Table('college-db-email')
+
+        # Fallback schools in order
+        FALLBACK_SCHOOLS = [
+            'ACU', 'AKN', 'ALA', 'ALB', 'ALC', 'ALS', 'APS', 'ARK', 'ARS', 'ATU',
+            'AUB', 'BALL', 'BAY', 'BGU', 'BST', 'BUT', 'BYU', 'CCU', 'CHAR', 'CHI',
+            'CHIC', 'CLE', 'CMI', 'CMP', 'CNU', 'CO', 'COL', 'CSL', 'DAV', 'DAY', 'DEL'
+        ]
+
+        # Try preferred school first, then fallbacks
+        schools_to_try = [school_code] if school_code else []
+        schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
+
+        for try_school in schools_to_try:
+            # Query campaign_data for this school
+            response = campaign_data_table.query(
+                KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+                FilterExpression=Attr('school_code').eq(try_school),
+                Limit=1
+            )
+
+            items = response.get('Items', [])
+            if items:
+                logger.info(f"Found products for school {try_school} (preferred: {school_code})")
+                recipient = items[0]
+
+                # Get school information
+                try:
+                    school_response = college_db_table.get_item(Key={'school_code': try_school})
+                    if 'Item' in school_response:
+                        school_info = school_response['Item']
+                        recipient['school_name'] = school_info.get('school_name', try_school)
+                        recipient['school_logo'] = school_info.get('school_logo', '')
+                        recipient['school_page'] = school_info.get('school_page', '')
+                except Exception as e:
+                    logger.error(f"Error getting school info for {try_school}: {e}")
+
+                return recipient
+
+        logger.warning(f"No products found for school {school_code} or any fallback schools")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting products for test user: {e}")
+        return None
+
 def send_batch_emails(campaign_id, batch_number, is_test=False):
     """Send emails for a specific batch with safety checks"""
     try:
@@ -569,23 +630,40 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
             response = test_users_table.scan(
                 FilterExpression=Attr('active').eq(True)
             )
-            records = response.get('Items', [])
-            
-            # Convert test users to campaign data format
+            test_users = response.get('Items', [])
+
+            # Convert test users to campaign data format with actual products
             test_records = []
-            for user in records:
-                test_records.append({
-                    'campaign_id': campaign_id,
-                    'record_id': f"test_{user['email']}",
-                    'customer_email': user['email'],
-                    'customer_name': user['name'],
-                    'school_code': user.get('school_code', 'TEST'),
-                    'email_sent': False,
-                    'product_link_1': 'https://www.rrinconline.com/products/test-product',
-                    'product_image_1': 'https://via.placeholder.com/300x300?text=Test+Product',
-                    'product_name_1': 'Test Product',
-                    'product_price_1': '19.99'
-                })
+            for user in test_users:
+                # Get products for this test user's school
+                school_code = user.get('school_code', '')
+                recipient_data = get_products_for_test_user(campaign_id, school_code)
+
+                if recipient_data:
+                    # Override recipient data with test user info
+                    recipient_data['customer_email'] = user['email']
+                    recipient_data['recipient_name'] = user['name']
+                    recipient_data['customer_name'] = user['name']
+                    recipient_data['record_id'] = f"test_{user['email']}"
+                    recipient_data['email_sent'] = False
+
+                    test_records.append(recipient_data)
+                else:
+                    # Fallback to placeholder if no products found
+                    logger.warning(f"No products found for test user {user['email']} (school: {school_code}), using placeholder")
+                    test_records.append({
+                        'campaign_id': campaign_id,
+                        'record_id': f"test_{user['email']}",
+                        'customer_email': user['email'],
+                        'customer_name': user['name'],
+                        'recipient_name': user['name'],
+                        'school_code': school_code,
+                        'email_sent': False,
+                        'product_link_1': 'https://www.rrinconline.com/products/test-product',
+                        'product_image_1': 'https://via.placeholder.com/300x300?text=Test+Product',
+                        'product_name_1': 'Test Product',
+                        'product_price_1': '19.99'
+                    })
             records = test_records
         else:
             # Get actual campaign data for this batch

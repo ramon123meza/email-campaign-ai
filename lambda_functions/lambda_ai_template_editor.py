@@ -180,10 +180,21 @@ img { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-
 </td></tr>
 
 <!-- CTA SECTION -->
-<tr id="cta-section"><td style="background-color:#ffffff; padding:12px 24px; text-align:center;">
-<a href="{{CTA_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_BG_COLOR}}; color:{{CTA_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
-{{CTA_TEXT}}
+<tr id="cta-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
+<table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+<tr>
+<td style="padding:0 8px;">
+<a href="{{CTA_PRIMARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_PRIMARY_BG_COLOR}}; color:{{CTA_PRIMARY_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
+{{CTA_PRIMARY_TEXT}}
 </a>
+</td>
+<td style="padding:0 8px;">
+<a href="{{CTA_SECONDARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_SECONDARY_BG_COLOR}}; color:{{CTA_SECONDARY_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
+{{CTA_SECONDARY_TEXT}}
+</a>
+</td>
+</tr>
+</table>
 </td></tr>
 
 <tr><td style="background-color:#ffffff;">
@@ -239,6 +250,17 @@ def get_default_template_config():
         'PRODUCTS_TITLE': 'Featured Collection',
         'PRODUCTS_SUBTITLE': 'We\'ve selected these exclusive items just for you!',
         'PRODUCTS_HTML': '<!-- Products will be dynamically inserted here -->',
+        # Primary CTA Button (Shop the Collection)
+        'CTA_PRIMARY_TEXT': 'Shop the Collection',
+        'CTA_PRIMARY_LINK': 'https://www.rrinconline.com',
+        'CTA_PRIMARY_BG_COLOR': '#7ac4c9',
+        'CTA_PRIMARY_TEXT_COLOR': '#000000',
+        # Secondary CTA Button (Shop your Team's Collection - personalized per recipient)
+        'CTA_SECONDARY_TEXT': 'Shop Your Team\'s Collection',
+        'CTA_SECONDARY_LINK': '{{SCHOOL_PAGE}}',  # Will be replaced per recipient
+        'CTA_SECONDARY_BG_COLOR': '#000000',
+        'CTA_SECONDARY_TEXT_COLOR': '#ffffff',
+        # Legacy CTA fields (for backwards compatibility)
         'CTA_TEXT': 'Shop Collection',
         'CTA_LINK': '#',
         'CTA_BG_COLOR': '#7ac4c9',
