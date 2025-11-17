@@ -447,33 +447,172 @@ def handle_health_check():
         'claude_configured': bool(CLAUDE_API_KEY)
     })
 
+def analyze_campaign_products(campaign_id):
+    """Analyze campaign products to understand what's being promoted"""
+    try:
+        # Get a sample of campaign data to analyze products
+        campaign_data_table = dynamodb.Table('campaign_data')
+        response = campaign_data_table.query(
+            KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+            Limit=10  # Sample first 10 records
+        )
+
+        records = response.get('Items', [])
+        if not records:
+            return None
+
+        # Extract product information
+        product_names = []
+        school_codes = set()
+        sample_products = []
+
+        for record in records:
+            school_codes.add(record.get('school_code', ''))
+            for i in range(1, 5):
+                product_name = record.get(f'product_name_{i}', '')
+                if product_name:
+                    product_names.append(product_name)
+                    if len(sample_products) < 3:
+                        sample_products.append({
+                            'name': product_name,
+                            'price': record.get(f'product_price_{i}', ''),
+                            'image': record.get(f'product_image_{i}', '')
+                        })
+
+        # Get campaign details
+        campaigns_table = dynamodb.Table('email_campaigns')
+        campaign_response = campaigns_table.get_item(Key={'campaign_id': campaign_id})
+        campaign = campaign_response.get('Item', {})
+
+        return {
+            'product_names': product_names[:10],  # First 10 product names
+            'school_codes': list(school_codes)[:5],  # First 5 schools
+            'sample_products': sample_products,
+            'campaign_name': campaign.get('campaign_name', ''),
+            'total_products': len(product_names),
+            'total_schools': len(school_codes)
+        }
+
+    except Exception as e:
+        logger.error(f"Error analyzing campaign products: {e}")
+        return None
+
+def generate_ai_campaign_metadata(campaign_analysis):
+    """Use AI to generate compelling campaign metadata based on products"""
+    try:
+        if not campaign_analysis or not OPENAI_API_KEY:
+            return None
+
+        system_prompt = """You are an expert email marketing copywriter specializing in collegiate merchandise and fan gear.
+Generate compelling email campaign content that drives engagement and sales.
+
+GUIDELINES:
+- Create attention-grabbing headlines that speak to college pride
+- Use action-oriented, enthusiastic language
+- Keep descriptions concise but compelling (2-3 sentences max)
+- Make CTAs clear and action-driven
+- Reference specific product types when possible
+
+OUTPUT FORMAT (JSON):
+{
+  "campaign_title": "Email subject line (max 60 chars)",
+  "main_title": "Bold headline for email body (max 50 chars)",
+  "description": "2-3 sentence description highlighting the products",
+  "cta_text": "Call-to-action button text (max 25 chars)",
+  "products_title": "Products section headline",
+  "products_subtitle": "Products section subheadline"
+}"""
+
+        product_summary = ""
+        if campaign_analysis.get('sample_products'):
+            product_summary = "Sample Products:\n"
+            for p in campaign_analysis['sample_products'][:3]:
+                product_summary += f"- {p['name']} (${p['price']})\n"
+
+        schools_list = ", ".join(campaign_analysis.get('school_codes', [])[:3])
+
+        user_message = f"""Campaign: {campaign_analysis.get('campaign_name', 'New Collection')}
+Number of Products: {campaign_analysis.get('total_products', 0)}
+Schools Featured: {schools_list} (and {campaign_analysis.get('total_schools', 0) - 3} more)
+
+{product_summary}
+
+Generate engaging email campaign content for this collegiate merchandise collection."""
+
+        response_text = call_openai_api(
+            messages=[{"role": "user", "content": user_message}],
+            system_prompt=system_prompt,
+            temperature=0.7,
+            max_tokens=800
+        )
+
+        # Extract JSON from response
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            metadata = json.loads(json_match.group(0))
+            logger.info(f"Generated AI metadata: {metadata}")
+            return metadata
+
+        logger.warning("Could not extract JSON from AI response")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error generating AI metadata: {e}")
+        return None
+
 def handle_create_template_instance(event):
-    """Create a new template instance for a campaign"""
+    """Create a new template instance for a campaign with AI-generated metadata"""
     try:
         # Extract campaign_id from path
         if 'rawPath' in event:
             path = event['rawPath']
         else:
             path = event.get('path', '')
-            
+
         path_parts = path.split('/')
         campaign_id = path_parts[3]
-        
+
         body = event.get('body', {})
         if isinstance(body, str):
             body = json.loads(body)
-        
+
         # Get default template and config
         template_html = get_standard_email_template()
         template_config = get_default_template_config()
-        
-        # Override with any provided config
+
+        # Analyze campaign products and generate AI metadata
+        logger.info(f"Analyzing campaign products for: {campaign_id}")
+        campaign_analysis = analyze_campaign_products(campaign_id)
+
+        if campaign_analysis:
+            logger.info(f"Campaign analysis: {campaign_analysis.get('total_products', 0)} products, {campaign_analysis.get('total_schools', 0)} schools")
+
+            # Generate AI-powered metadata
+            ai_metadata = generate_ai_campaign_metadata(campaign_analysis)
+
+            if ai_metadata:
+                # Update template config with AI-generated content
+                template_config.update({
+                    'CAMPAIGN_TITLE': ai_metadata.get('campaign_title', template_config['CAMPAIGN_TITLE']),
+                    'MAIN_TITLE': ai_metadata.get('main_title', template_config['MAIN_TITLE']),
+                    'DESCRIPTION_TEXT': ai_metadata.get('description', template_config['DESCRIPTION_TEXT']),
+                    'CTA_TEXT': ai_metadata.get('cta_text', template_config['CTA_TEXT']),
+                    'PRODUCTS_TITLE': ai_metadata.get('products_title', template_config['PRODUCTS_TITLE']),
+                    'PRODUCTS_SUBTITLE': ai_metadata.get('products_subtitle', template_config['PRODUCTS_SUBTITLE'])
+                })
+                logger.info("Applied AI-generated metadata to template")
+            else:
+                logger.info("Using default metadata (AI generation failed)")
+        else:
+            logger.info("No campaign data found, using default metadata")
+
+        # Override with any provided config from request body
         if 'template_config' in body:
             template_config.update(body['template_config'])
-        
+
         # Apply config to template
         rendered_html = apply_template_config(template_html, template_config)
-        
+
         # Create template instance
         template_instances_table = dynamodb.Table('campaign_template_instances')
         template_instance = {
@@ -483,19 +622,23 @@ def handle_create_template_instance(event):
             'version_history': [],
             'last_modified': datetime.now().isoformat(),
             'ai_chat_history': [],
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'ai_generated': bool(campaign_analysis and ai_metadata),
+            'campaign_analysis': campaign_analysis if campaign_analysis else {}
         }
-        
+
         template_instances_table.put_item(Item=template_instance)
-        
-        logger.info(f"Created template instance for campaign: {campaign_id}")
+
+        logger.info(f"Created template instance for campaign: {campaign_id} (AI-generated: {template_instance['ai_generated']})")
         return cors_response(201, {
             'message': 'Template instance created successfully',
-            'template_instance': template_instance
+            'template_instance': template_instance,
+            'ai_generated': template_instance['ai_generated']
         })
-        
+
     except Exception as e:
         logger.error(f"Error creating template instance: {e}")
+        logger.error(traceback.format_exc())
         return cors_response(500, {'error': str(e)})
 
 def handle_get_template_instance(event):
