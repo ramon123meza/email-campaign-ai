@@ -116,9 +116,9 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         personalized_html = template_html_raw
 
         # Step 1: Apply base template config (AI-generated titles, descriptions, etc.)
-        # but SKIP GREETING_TEXT and PRODUCTS_HTML - we'll personalize these per recipient
+        # but SKIP fields that need per-recipient personalization
         for key, value in template_config.items():
-            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE']:  # Skip - we'll personalize these
+            if key not in ['PRODUCTS_HTML', 'GREETING_TEXT', 'PRODUCTS_TITLE', 'PRODUCTS_SUBTITLE']:  # Skip - we'll personalize these
                 placeholder = '{{' + key + '}}'
                 personalized_html = personalized_html.replace(placeholder, str(value))
 
@@ -135,10 +135,22 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         school_code = recipient.get('school_code', '')
         team_name = get_school_name_from_code(school_code) if school_code else ''
 
-        # Update products title with school name
-        if team_name:
+        # Update products title with school name (ALWAYS replace, even if no team_name)
+        if team_name and team_name != school_code:
             products_title = f"Featured {team_name} Collection"
-            personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+        elif school_code:
+            # Fallback: still use school code if lookup failed, but mark it clearly
+            products_title = f"Featured {school_code} Collection"
+        else:
+            products_title = "Featured Collection"
+        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', products_title)
+
+        # Also replace PRODUCTS_SUBTITLE with school-specific text
+        if team_name and team_name != school_code:
+            products_subtitle = f"Show your {team_name} pride with these exclusive items!"
+        else:
+            products_subtitle = template_config.get('PRODUCTS_SUBTITLE', 'We\'ve selected these exclusive items just for you!')
+        personalized_html = personalized_html.replace('{{PRODUCTS_SUBTITLE}}', products_subtitle)
 
         # Step 4: Generate recipient-specific products HTML
         product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))

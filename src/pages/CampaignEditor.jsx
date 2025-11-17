@@ -526,6 +526,70 @@ function CampaignEditor() {
                         rows={4}
                       />
                     </div>
+
+                    <div className="col-span-2">
+                      <h3 className="text-lg font-semibold text-primary mb-4 mt-4">Call-to-Action Buttons</h3>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-2">
+                        Primary Button Text (Shop the Collection)
+                      </label>
+                      <input
+                        type="text"
+                        value={templateInstance?.template_config?.CTA_PRIMARY_TEXT || 'Shop the Collection'}
+                        onChange={(e) => {
+                          const newConfig = { ...templateInstance.template_config, CTA_PRIMARY_TEXT: e.target.value }
+                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                        }}
+                        className="input-dark"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-2">
+                        Primary Button Link
+                      </label>
+                      <input
+                        type="text"
+                        value={templateInstance?.template_config?.CTA_PRIMARY_LINK || 'https://www.rrinconline.com'}
+                        onChange={(e) => {
+                          const newConfig = { ...templateInstance.template_config, CTA_PRIMARY_LINK: e.target.value }
+                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                        }}
+                        className="input-dark"
+                        placeholder="https://www.example.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-2">
+                        Secondary Button Text (Team-specific)
+                      </label>
+                      <input
+                        type="text"
+                        value={templateInstance?.template_config?.CTA_SECONDARY_TEXT || 'Shop Your Team\'s Collection'}
+                        onChange={(e) => {
+                          const newConfig = { ...templateInstance.template_config, CTA_SECONDARY_TEXT: e.target.value }
+                          setTemplateInstance({ ...templateInstance, template_config: newConfig })
+                        }}
+                        className="input-dark"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-2">
+                        Secondary Button Link
+                        <span className="text-muted text-xs ml-2">(Auto-populated per recipient)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value="{{SCHOOL_PAGE}}"
+                        disabled
+                        className="input-dark opacity-50"
+                        title="This link is automatically personalized for each recipient based on their school"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

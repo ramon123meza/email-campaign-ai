@@ -102,6 +102,84 @@ def call_openai_api(messages, system_prompt="", max_tokens=4000, temperature=0.7
         logger.error(f"Error calling OpenAI API: {str(e)}")
         raise
 
+def call_claude_api(messages, system_prompt="", max_tokens=4000, temperature=0.7):
+    """
+    Call Anthropic Claude API using pure REST (no dependencies)
+    """
+    if not CLAUDE_API_KEY:
+        raise Exception("CLAUDE_API_KEY environment variable not set")
+
+    url = 'https://api.anthropic.com/v1/messages'
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01'
+    }
+
+    # Claude expects messages in a specific format (no system in messages array)
+    formatted_messages = []
+    for msg in messages:
+        formatted_messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+
+    payload = {
+        'model': 'claude-3-5-sonnet-20241022',  # Latest Claude 3.5 Sonnet
+        'max_tokens': max_tokens,
+        'temperature': temperature,
+        'messages': formatted_messages
+    }
+
+    # Add system prompt if provided
+    if system_prompt:
+        payload['system'] = system_prompt
+
+    try:
+        req = request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+
+        with request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result['content'][0]['text']
+
+    except error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        logger.error(f"Claude API Error: {e.code} - {error_body}")
+        raise Exception(f"Claude API request failed: {error_body}")
+    except Exception as e:
+        logger.error(f"Error calling Claude API: {str(e)}")
+        raise
+
+def call_ai_api(messages, system_prompt="", max_tokens=4000, temperature=0.7):
+    """
+    Smart AI router - tries Claude first (if available), then OpenAI
+    """
+    # Try Claude first (preferred)
+    if CLAUDE_API_KEY:
+        try:
+            logger.info("Using Claude API for AI processing")
+            return call_claude_api(messages, system_prompt, max_tokens, temperature)
+        except Exception as e:
+            logger.warning(f"Claude API failed, trying OpenAI: {e}")
+            # Fall through to OpenAI
+
+    # Try OpenAI as fallback
+    if OPENAI_API_KEY:
+        try:
+            logger.info("Using OpenAI API for AI processing")
+            return call_openai_api(messages, system_prompt, max_tokens, temperature)
+        except Exception as e:
+            logger.error(f"OpenAI API also failed: {e}")
+            raise
+
+    # No API keys available
+    raise Exception("No AI API keys configured. Please set CLAUDE_API_KEY or OPENAI_API_KEY environment variable.")
+
 def get_standard_email_template():
     """
     Returns the standardized email template based on hats_campaign.py
@@ -161,6 +239,13 @@ img { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-
 </p>
 </td></tr>
 
+<!-- PRIMARY CTA SECTION (Shop the Collection) - ABOVE PRODUCTS -->
+<tr id="cta-primary-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
+<a href="{{CTA_PRIMARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_PRIMARY_BG_COLOR}}; color:{{CTA_PRIMARY_TEXT_COLOR}}; padding:16px 32px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:18px; font-weight:bold;">
+{{CTA_PRIMARY_TEXT}}
+</a>
+</td></tr>
+
 <!-- PRODUCTS SECTION -->
 <tr id="products-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
 <h2 style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:24px; font-weight:bold; color:#000000; margin:0 0 10px 0;">
@@ -179,22 +264,11 @@ img { border:0;height:auto;line-height:100%; outline:none;text-decoration:none;-
 
 </td></tr>
 
-<!-- CTA SECTION -->
-<tr id="cta-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
-<table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
-<tr>
-<td style="padding:0 8px;">
-<a href="{{CTA_PRIMARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_PRIMARY_BG_COLOR}}; color:{{CTA_PRIMARY_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
-{{CTA_PRIMARY_TEXT}}
-</a>
-</td>
-<td style="padding:0 8px;">
-<a href="{{CTA_SECONDARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_SECONDARY_BG_COLOR}}; color:{{CTA_SECONDARY_TEXT_COLOR}}; padding:16px 28px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:16px; font-weight:bold;">
+<!-- SECONDARY CTA SECTION (Shop Your Team's Collection) - BELOW PRODUCTS -->
+<tr id="cta-secondary-section"><td style="background-color:#ffffff; padding:20px 24px; text-align:center;">
+<a href="{{CTA_SECONDARY_LINK}}" target="_blank" style="display:inline-block; background-color:{{CTA_SECONDARY_BG_COLOR}}; color:{{CTA_SECONDARY_TEXT_COLOR}}; padding:16px 32px; text-decoration:none; border-radius:4px; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; font-size:18px; font-weight:bold;">
 {{CTA_SECONDARY_TEXT}}
 </a>
-</td>
-</tr>
-</table>
 </td></tr>
 
 <tr><td style="background-color:#ffffff;">
@@ -332,7 +406,7 @@ def apply_template_config(template_html, config):
 
 def advanced_ai_processor(user_request, current_config, current_html):
     """
-    Handle complex AI requests using OpenAI
+    Handle complex AI requests using Claude or OpenAI
     Returns: (success: bool, updated_config: dict, updated_html: str, explanation: str)
     """
     system_prompt = """You are an expert email template designer. You can modify email templates based on user requests.
@@ -348,10 +422,17 @@ AVAILABLE TEMPLATE VARIABLES:
 - DESCRIPTION_TEXT: Main description paragraph
 - PRODUCTS_TITLE: Products section title
 - PRODUCTS_SUBTITLE: Products section subtitle
-- CTA_TEXT: Call-to-action button text
-- CTA_BG_COLOR: Button background color
-- CTA_TEXT_COLOR: Button text color
-- CTA_LINK: Button link destination
+- CTA_PRIMARY_TEXT: Primary CTA button text (Shop the Collection)
+- CTA_PRIMARY_LINK: Primary CTA button link
+- CTA_PRIMARY_BG_COLOR: Primary button background color
+- CTA_PRIMARY_TEXT_COLOR: Primary button text color
+- CTA_SECONDARY_TEXT: Secondary CTA button text (Shop Your Team's Collection)
+- CTA_SECONDARY_BG_COLOR: Secondary button background color
+- CTA_SECONDARY_TEXT_COLOR: Secondary button text color
+- CTA_TEXT: Legacy button text (for backwards compatibility)
+- CTA_BG_COLOR: Legacy button background color
+- CTA_TEXT_COLOR: Legacy button text color
+- CTA_LINK: Legacy button link destination
 
 RULES:
 1. Make ONLY the requested changes
@@ -379,7 +460,7 @@ User request: {user_request}
 Please provide the necessary changes to fulfill this request."""
 
     try:
-        response_text = call_openai_api(
+        response_text = call_ai_api(
             messages=[{"role": "user", "content": user_message}],
             system_prompt=system_prompt,
             temperature=0.3,
