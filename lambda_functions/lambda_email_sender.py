@@ -194,19 +194,28 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         return template_html_raw
 
 def get_school_name_from_code(school_code):
-    """Get school name from school code using college-db-email table"""
+    """Get school name from school code using college-db-email table
+
+    NOTE: The college-db-email table has partition key 'school_name' (the full name),
+    and 'school_code' (e.g., 'AKN') is just an attribute. We must scan the table
+    to find the school by code. This is efficient since table has <200 records.
+    """
     try:
         if not school_code:
             logger.warning("get_school_name_from_code called with empty school_code")
             return school_code
 
         college_db_table = dynamodb.Table('college-db-email')
-        logger.info(f"Looking up school_code='{school_code}' in college-db-email table")
+        logger.info(f"Scanning college-db-email table for school_code='{school_code}'")
 
-        response = college_db_table.get_item(Key={'school_code': school_code})
+        # Must use scan() since school_code is an attribute, not the partition key
+        response = college_db_table.scan(
+            FilterExpression=Attr('school_code').eq(school_code)
+        )
 
-        if 'Item' in response:
-            school_name = response['Item'].get('school_name', '')
+        items = response.get('Items', [])
+        if items:
+            school_name = items[0].get('school_name', '')
             logger.info(f"Found school entry: school_code='{school_code}', school_name='{school_name}'")
 
             # If school_name is empty or same as code, log warning

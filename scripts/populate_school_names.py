@@ -124,12 +124,16 @@ def check_existing_schools():
     return existing
 
 def add_school(school):
-    """Add a single school to the table"""
+    """Add a single school to the table
+
+    NOTE: The college-db-email table has partition key 'school_name' (the full name),
+    and 'school_code' is just an attribute.
+    """
     try:
-        # Add default school_page and school_logo
+        # The partition key is school_name, not school_code
         item = {
-            'school_code': school['school_code'],
-            'school_name': school['school_name'],
+            'school_name': school['school_name'],  # This is the partition key!
+            'school_code': school['school_code'],  # This is just an attribute
             'school_page': f"https://www.rrinconline.com/collections/{school['school_code'].lower()}",
             'school_logo': ''  # Add your logo URL pattern here
         }
@@ -171,15 +175,22 @@ def populate_schools():
     print(f"{'='*60}")
 
 def verify_lookups():
-    """Verify a few school lookups work"""
+    """Verify a few school lookups work
+
+    NOTE: Must use scan() since school_code is an attribute, not the partition key.
+    """
     print("\nVerifying school lookups...")
     test_codes = ['AKN', 'ALA', 'RAD', 'HOUS', 'OSU']
 
     for code in test_codes:
         try:
-            response = college_db_table.get_item(Key={'school_code': code})
-            if 'Item' in response:
-                name = response['Item'].get('school_name', 'NOT FOUND')
+            # Must scan since school_code is not the partition key
+            response = college_db_table.scan(
+                FilterExpression=Attr('school_code').eq(code)
+            )
+            items = response.get('Items', [])
+            if items:
+                name = items[0].get('school_name', 'NOT FOUND')
                 print(f"  ✅ {code:6s} → {name}")
             else:
                 print(f"  ❌ {code:6s} → NOT FOUND IN TABLE")
