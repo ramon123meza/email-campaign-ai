@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { 
-  ArrowLeft, 
-  Send, 
-  Settings, 
-  Eye, 
+import {
+  ArrowLeft,
+  Send,
+  Settings,
+  Eye,
   Download,
   Maximize2,
   MessageSquare,
   Sparkles,
   Save,
   Undo,
-  Redo
+  Redo,
+  TestTube,
+  CheckCircle,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react'
-import { campaignAPI } from '../utils/api'
+import { campaignAPI, emailAPI } from '../utils/api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmailCanvas from '../components/EmailCanvas'
@@ -35,7 +39,8 @@ function CampaignEditor() {
   const [templateInstance, setTemplateInstance] = useState(null)
   const [chatHistory, setChatHistory] = useState([])
   const [isAIProcessing, setIsAIProcessing] = useState(false)
-  
+  const [testEmailsStatus, setTestEmailsStatus] = useState(null)
+
   const canvasRef = useRef(null)
 
   // Fetch campaign data
@@ -110,6 +115,25 @@ function CampaignEditor() {
     }
   })
 
+  // Send test emails mutation
+  const sendTestMutation = useMutation({
+    mutationFn: (campaignId) => emailAPI.sendTest(campaignId),
+    onMutate: () => {
+      setTestEmailsStatus('sending')
+    },
+    onSuccess: (data) => {
+      setTestEmailsStatus('success')
+      toast.success('Test emails sent successfully!')
+      setTimeout(() => setTestEmailsStatus(null), 3000)
+    },
+    onError: (error) => {
+      console.error('Error sending test emails:', error)
+      setTestEmailsStatus('error')
+      toast.error('Failed to send test emails')
+      setTimeout(() => setTestEmailsStatus(null), 3000)
+    }
+  })
+
   useEffect(() => {
     if (templateData?.template_instance) {
       setTemplateInstance(templateData.template_instance)
@@ -173,6 +197,10 @@ function CampaignEditor() {
       }
       saveCampaignMutation.mutate(updateData)
     }
+  }
+
+  const handleSendTest = () => {
+    sendTestMutation.mutate(id)
   }
 
   if (campaignLoading || templateLoading) {
@@ -259,6 +287,34 @@ function CampaignEditor() {
             
             {/* Action Buttons */}
             <button
+              onClick={handleSendTest}
+              disabled={sendTestMutation.isPending || testEmailsStatus === 'sending'}
+              className="btn-secondary flex items-center space-x-2"
+            >
+              {testEmailsStatus === 'sending' ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : testEmailsStatus === 'success' ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Sent!</span>
+                </>
+              ) : testEmailsStatus === 'error' ? (
+                <>
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Failed</span>
+                </>
+              ) : (
+                <>
+                  <TestTube className="w-4 h-4" />
+                  <span>Send Test</span>
+                </>
+              )}
+            </button>
+
+            <button
               onClick={handleSaveCampaign}
               disabled={saveCampaignMutation.isLoading}
               className="btn-success flex items-center space-x-2"
@@ -266,7 +322,7 @@ function CampaignEditor() {
               <Save className="w-4 h-4" />
               <span>{saveCampaignMutation.isLoading ? 'Saving...' : 'Save'}</span>
             </button>
-            
+
             <button
               onClick={() => setShowChat(!showChat)}
               className={`btn-secondary flex items-center space-x-2 ${showChat ? 'bg-accent-blue text-white' : ''}`}

@@ -144,7 +144,13 @@ export const campaignAPI = {
   // Batches
   getCampaignBatches: (campaignId) =>
     campaignApi.get(`/api/campaigns/${campaignId}/batches`),
-  
+
+  getBatchRecipients: (campaignId, batchNumber) =>
+    campaignApi.get(`/api/campaigns/${campaignId}/batches/${batchNumber}/recipients`),
+
+  previewRecipientEmail: (campaignId, recordId) =>
+    campaignApi.get(`/api/campaigns/${campaignId}/preview/${recordId}`),
+
   // Colleges
   getColleges: () => campaignApi.get('/api/colleges'),
   createCollege: (data) => campaignApi.post('/api/colleges', data),

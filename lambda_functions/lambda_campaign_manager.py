@@ -206,6 +206,10 @@ def lambda_handler(event, context):
             return restore_template_version(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/preview-customer'):
             return preview_customer_email(event)
+        elif method == 'GET' and '/preview/' in path and path.startswith('/api/campaigns/'):
+            return preview_recipient_email(event)
+        elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches/' in path and '/recipients' in path:
+            return get_batch_recipients(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches/' in path and '/emails' in path:
             return get_batch_emails(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches' in path:
@@ -1178,6 +1182,194 @@ def get_batch_emails(event):
     except Exception as e:
         logger.error(f"Error getting batch emails: {e}")
         return cors_response(500, {'error': str(e)})
+
+def get_batch_recipients(event):
+    """Get all recipients for a specific batch from campaign_data table"""
+    try:
+        # Extract campaign_id and batch_number from path
+        # Path format: /api/campaigns/{campaign_id}/batches/{batch_number}/recipients
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+        batch_number = int(path_parts[5])
+
+        logger.info(f"Getting recipients for campaign {campaign_id}, batch {batch_number}")
+
+        # Query campaign_data table using BatchIndex GSI
+        campaign_data_table = dynamodb.Table('campaign_data')
+
+        response = campaign_data_table.query(
+            IndexName='BatchIndex',
+            KeyConditionExpression=Key('campaign_id').eq(campaign_id) & Key('batch_number').eq(batch_number),
+            Limit=2000  # One batch max
+        )
+
+        recipients = response.get('Items', [])
+
+        logger.info(f"Found {len(recipients)} recipients")
+
+        return cors_response(200, recipients)
+
+    except Exception as e:
+        logger.error(f"Error getting batch recipients: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def preview_recipient_email(event):
+    """Generate HTML preview for a specific recipient's email"""
+    try:
+        # Extract campaign_id and record_id from path
+        # Path format: /api/campaigns/{campaign_id}/preview/{record_id}
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+        record_id = path_parts[5]
+
+        logger.info(f"Previewing email for campaign {campaign_id}, record {record_id}")
+
+        # Get recipient record from campaign_data
+        campaign_data_table = dynamodb.Table('campaign_data')
+        response = campaign_data_table.get_item(
+            Key={
+                'campaign_id': campaign_id,
+                'record_id': record_id
+            }
+        )
+
+        if 'Item' not in response:
+            return cors_response(404, {'error': 'Recipient not found'})
+
+        recipient = response['Item']
+
+        # Get template instance for this campaign
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(
+            Key={'campaign_id': campaign_id}
+        )
+
+        if 'Item' not in template_response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = template_response['Item']
+        template_html = template_instance.get('template_html', '')
+
+        # Personalize the template for this recipient
+        personalized_html = generate_personalized_email(template_html, recipient)
+
+        return cors_response(200, {'html': personalized_html})
+
+    except Exception as e:
+        logger.error(f"Error previewing recipient email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def generate_personalized_email(template_html, recipient):
+    """Generate personalized HTML email for a recipient"""
+    try:
+        # Personalized greeting
+        customer_name = recipient.get('customer_name', '')
+        greeting = f"Hi {customer_name}," if customer_name else "Hi there,"
+
+        # School/team information
+        team = recipient.get('school_code', '')
+        team_text = f"Featured {team} Collection" if team else "Featured Collection"
+
+        # Generate products HTML
+        product_count = sum(1 for i in range(1, 5) if recipient.get(f'product_image_{i}'))
+        products_html = generate_products_html_for_preview(recipient, product_count)
+
+        # Replace dynamic content in template
+        personalized_html = template_html
+
+        # Personal replacements
+        personalized_html = personalized_html.replace('{{GREETING_TEXT}}', greeting)
+        personalized_html = personalized_html.replace('{{PRODUCTS_TITLE}}', team_text)
+        personalized_html = personalized_html.replace('{{PRODUCTS_HTML}}', products_html)
+
+        # School-specific replacements
+        school_page = recipient.get('school_page', '#')
+        personalized_html = personalized_html.replace('{{HERO_LINK}}', school_page)
+        personalized_html = personalized_html.replace('{{CTA_LINK}}', school_page)
+
+        # Replace hero image if school logo is available
+        school_logo = recipient.get('school_logo', '')
+        if school_logo:
+            personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
+
+        return personalized_html
+
+    except Exception as e:
+        logger.error(f"Error generating personalized email: {e}")
+        return template_html
+
+def generate_products_html_for_preview(recipient, product_count):
+    """Generate HTML for products section in preview"""
+    if product_count == 0:
+        return '<!-- No products available -->'
+
+    if product_count == 1:
+        # Single product layout
+        return f'''
+<td width="100%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="{recipient.get('product_link_1', '#')}" target="_blank">
+<img src="{recipient.get('product_image_1', '')}" alt="{recipient.get('product_name_1', 'Product')}" style="display:block;border:0;max-width:300px;max-height:300px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:16px;color:#333333;margin:0 0 5px 0;">{recipient.get('product_name_1', '')}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:20px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${recipient.get('product_price_1', '0.00')}</p>
+<a href="{recipient.get('product_link_1', '#')}" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+    else:
+        # Multiple products layout
+        products_per_row = min(product_count, 2)
+        width_percent = 100 // products_per_row
+
+        products_html = ''
+        for i in range(1, product_count + 1):
+            product_image = recipient.get(f'product_image_{i}', '')
+            product_link = recipient.get(f'product_link_{i}', '#')
+            product_name = recipient.get(f'product_name_{i}', '')
+            product_price = recipient.get(f'product_price_{i}', '0.00')
+
+            if product_image:
+                products_html += f'''
+<td width="{width_percent}%" style="padding:0 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr><td align="center" style="height:250px;">
+<a href="{product_link}" target="_blank">
+<img src="{product_image}" alt="{product_name}" style="display:block;border:0;max-width:250px;max-height:250px;border-radius:8px;" />
+</a>
+</td></tr>
+<tr><td align="center" style="padding-top:10px;">
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:14px;color:#333333;margin:0 0 5px 0;">{product_name}</p>
+<p style="font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:18px;font-weight:bold;color:#000000;margin:0 0 10px 0;">${product_price}</p>
+<a href="{product_link}" target="_blank" style="display:inline-block;background-color:#000000;color:#ffffff;padding:8px 16px;text-decoration:none;border-radius:4px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-size:12px;">Shop Now</a>
+</td></tr>
+</table>
+</td>
+'''
+
+                # Start new row after 2 products
+                if i % 2 == 0 and i < product_count:
+                    products_html += "</tr><tr>"
+
+        return products_html
 
 def get_colleges(event):
     """Get all colleges"""
