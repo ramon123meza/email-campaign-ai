@@ -155,6 +155,10 @@ export const campaignAPI = {
   previewRecipientEmail: (campaignId, recordId) =>
     campaignApi.get(`/api/campaigns/${campaignId}/preview/${recordId}`),
 
+  // Test user preview (shows real test user data with products)
+  getTestPreview: (campaignId) =>
+    campaignApi.get(`/api/campaigns/${campaignId}/test-preview`),
+
   // Colleges
   getColleges: () => campaignApi.get('/api/colleges'),
   createCollege: (data) => campaignApi.post('/api/colleges', data),

@@ -61,6 +61,13 @@ function CampaignEditor() {
     enabled: !!id,
   })
 
+  // Fetch test user preview (shows real test user data with products)
+  const { data: testPreviewData, isLoading: testPreviewLoading, refetch: refetchTestPreview } = useQuery({
+    queryKey: ['test-preview', id],
+    queryFn: () => campaignAPI.getTestPreview(id),
+    enabled: !!id,
+  })
+
   // AI chat mutation
   const aiChatMutation = useMutation({
     mutationFn: (message) => campaignAPI.sendAIChat(id, message),
@@ -71,9 +78,10 @@ function CampaignEditor() {
       ])
       setIsAIProcessing(false)
       
-      // If the AI made template changes, refresh the template
+      // If the AI made template changes, refresh the template and test preview
       if (response.template_updated) {
         refetchTemplate()
+        refetchTestPreview()
         toast.success('Template updated successfully!')
       }
     },
@@ -90,7 +98,8 @@ function CampaignEditor() {
       if (response.success) {
         toast.success(response.message || 'Template updated successfully!')
         refetchTemplate()
-        
+        refetchTestPreview()
+
         // Add to chat history
         setChatHistory(prev => [...prev,
           { role: 'user', content: response.user_request || 'Template modification', timestamp: new Date() },
@@ -144,6 +153,7 @@ function CampaignEditor() {
     onSuccess: (data) => {
       toast.success('Hero image uploaded successfully!')
       refetchTemplate()
+      refetchTestPreview()
       setUploadingHero(false)
     },
     onError: (error) => {
@@ -155,16 +165,25 @@ function CampaignEditor() {
 
   useEffect(() => {
     if (templateData?.template_instance) {
-      setTemplateInstance(templateData.template_instance)
-      
+      const instance = templateData.template_instance
+
+      // If we have test preview data, use it to show REAL personalized preview
+      if (testPreviewData?.html) {
+        // Override template_html with personalized test user preview
+        instance.template_html = testPreviewData.html
+        instance.test_user_info = testPreviewData.test_user
+      }
+
+      setTemplateInstance(instance)
+
       // Load existing chat history
-      const aiHistory = templateData.template_instance.ai_chat_history || []
+      const aiHistory = instance.ai_chat_history || []
       setChatHistory(aiHistory.map(msg => ({
         ...msg,
         timestamp: new Date(msg.timestamp)
       })))
     }
-  }, [templateData])
+  }, [templateData, testPreviewData])
 
   const handleSendMessage = (message) => {
     const trimmedMessage = message?.trim()
@@ -478,11 +497,30 @@ function CampaignEditor() {
           <main className="flex-1 flex">
             <div className="flex-1 p-6">
               {activeTab === 'preview' ? (
-                <EmailCanvas 
-                  ref={canvasRef}
-                  templateInstance={templateInstance}
-                  isLoading={isAIProcessing}
-                />
+                <>
+                  {/* Test User Preview Badge */}
+                  {templateInstance?.test_user_info && (
+                    <div className="mb-4 p-3 bg-accent-blue/10 border border-accent-blue/30 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <Eye className="w-4 h-4 text-accent-blue" />
+                        <span className="text-sm text-primary font-medium">
+                          Previewing as: {templateInstance.test_user_info.name}
+                        </span>
+                        <span className="text-xs text-secondary">
+                          ({templateInstance.test_user_info.school_name || templateInstance.test_user_info.school_code})
+                        </span>
+                        <span className="text-xs text-muted ml-auto">
+                          This is exactly what {templateInstance.test_user_info.name} will receive in test emails
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <EmailCanvas
+                    ref={canvasRef}
+                    templateInstance={templateInstance}
+                    isLoading={isAIProcessing || testPreviewLoading}
+                  />
+                </>
               ) : (
                 <div className="card-dark h-full">
                   <h2 className="text-xl font-semibold text-primary mb-6">Campaign Settings</h2>

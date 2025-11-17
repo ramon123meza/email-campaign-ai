@@ -208,6 +208,8 @@ def lambda_handler(event, context):
             return restore_template_version(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/preview-customer'):
             return preview_customer_email(event)
+        elif method == 'GET' and path.startswith('/api/campaigns/') and path.endswith('/test-preview'):
+            return preview_test_user_email(event)
         elif method == 'GET' and '/preview/' in path and path.startswith('/api/campaigns/'):
             return preview_recipient_email(event)
         elif method == 'GET' and path.startswith('/api/campaigns/') and '/batches/' in path and '/recipients' in path:
@@ -2216,6 +2218,148 @@ def restore_template_version(event):
     except Exception as e:
         logger.error(f"Error restoring version: {e}")
         return cors_response(500, {'error': str(e)})
+
+def preview_test_user_email(event):
+    """
+    Generate preview using test user data - shows EXACTLY what test emails will look like
+    Uses first active test user (Arturo with RAD school) or Ramon with ALA school
+    Includes real products and full personalization
+    """
+    try:
+        # Extract campaign_id from path
+        if 'rawPath' in event:
+            path = event['rawPath']
+        else:
+            path = event.get('path', '')
+
+        path_parts = path.split('/')
+        campaign_id = path_parts[3]
+
+        logger.info(f"Generating test user preview for campaign {campaign_id}")
+
+        # Get first active test user from test_users table
+        test_users_table = dynamodb.Table('test_users')
+        response = test_users_table.scan(
+            FilterExpression=Attr('active').eq(True),
+            Limit=1
+        )
+
+        test_users = response.get('Items', [])
+        if not test_users:
+            # Fallback to generic preview
+            logger.warning("No test users found, returning generic preview")
+            return cors_response(404, {'error': 'No active test users found in test_users table'})
+
+        test_user = test_users[0]
+        school_code = test_user.get('school_code', '')
+
+        logger.info(f"Using test user: {test_user['name']} ({test_user['email']}) - School: {school_code}")
+
+        # Get products for this test user's school (with fallback logic)
+        recipient_data = get_products_for_test_user_preview(campaign_id, school_code)
+
+        if not recipient_data:
+            logger.warning(f"No products found for test user school {school_code} or fallbacks")
+            return cors_response(404, {'error': f'No products found for school {school_code} or any fallback schools'})
+
+        # Override with test user info
+        recipient_data['customer_email'] = test_user['email']
+        recipient_data['recipient_name'] = test_user['name']
+        recipient_data['customer_name'] = test_user['name']
+
+        # Get template instance for this campaign
+        template_instances_table = dynamodb.Table('campaign_template_instances')
+        template_response = template_instances_table.get_item(
+            Key={'campaign_id': campaign_id}
+        )
+
+        if 'Item' not in template_response:
+            return cors_response(404, {'error': 'Template instance not found'})
+
+        template_instance = template_response['Item']
+
+        # Use raw template with placeholders for personalization
+        template_html_raw = template_instance.get('template_html_raw', '')
+        template_config = template_instance.get('template_config', {})
+
+        # If raw template doesn't exist (old template), use rendered one
+        if not template_html_raw:
+            template_html_raw = template_instance.get('template_html', '')
+            logger.warning("Using old template format without raw template")
+
+        # Personalize the template for this test user (SAME AS REAL TEST EMAILS)
+        personalized_html = generate_personalized_email(template_html_raw, template_config, recipient_data)
+
+        logger.info(f"Generated test preview for {test_user['name']} with {school_code} school products")
+
+        return cors_response(200, {
+            'html': personalized_html,
+            'test_user': {
+                'name': test_user['name'],
+                'email': test_user['email'],
+                'school_code': school_code,
+                'school_name': recipient_data.get('school_name', school_code)
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error previewing test user email: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return cors_response(500, {'error': str(e)})
+
+def get_products_for_test_user_preview(campaign_id, school_code):
+    """
+    Get products for test user preview - same logic as test email sending
+    """
+    try:
+        campaign_data_table = dynamodb.Table('campaign_data')
+        college_db_table = dynamodb.Table('college-db-email')
+
+        # Fallback schools in order (same as test email logic)
+        FALLBACK_SCHOOLS = [
+            'ACU', 'AKN', 'ALA', 'ALB', 'ALC', 'ALS', 'APS', 'ARK', 'ARS', 'ATU',
+            'AUB', 'BALL', 'BAY', 'BGU', 'BST', 'BUT', 'BYU', 'CCU', 'CHAR', 'CHI',
+            'CHIC', 'CLE', 'CMI', 'CMP', 'CNU', 'CO', 'COL', 'CSL', 'DAV', 'DAY', 'DEL'
+        ]
+
+        # Try preferred school first, then fallbacks
+        schools_to_try = [school_code] if school_code else []
+        schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
+
+        for try_school in schools_to_try:
+            # Query campaign_data for this school
+            response = campaign_data_table.query(
+                KeyConditionExpression=Key('campaign_id').eq(campaign_id),
+                FilterExpression=Attr('school_code').eq(try_school),
+                Limit=1
+            )
+
+            items = response.get('Items', [])
+            if items:
+                logger.info(f"Found products for school {try_school} (preferred: {school_code})")
+                recipient = items[0]
+
+                # Get school information from college-db-email
+                try:
+                    school_response = college_db_table.get_item(Key={'school_code': try_school})
+                    if 'Item' in school_response:
+                        school_info = school_response['Item']
+                        recipient['school_name'] = school_info.get('school_name', try_school)
+                        recipient['school_logo'] = school_info.get('school_logo', '')
+                        recipient['school_page'] = school_info.get('school_page', '')
+                        logger.info(f"School info: {recipient['school_name']}")
+                except Exception as e:
+                    logger.error(f"Error getting school info for {try_school}: {e}")
+
+                return recipient
+
+        logger.warning(f"No products found for school {school_code} or any fallback schools")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting products for test user preview: {e}")
+        return None
 
 def preview_customer_email(event):
     """Preview what a specific customer will receive"""
