@@ -185,15 +185,29 @@ function CampaignEditor() {
     }
   })
 
+  // Set initial test user from test users list
+  useEffect(() => {
+    if (testUsers?.users && !selectedTestUserEmail) {
+      const activeUsers = testUsers.users.filter(u => u.active)
+      if (activeUsers.length > 0) {
+        console.log('Setting initial test user:', activeUsers[0].email)
+        setSelectedTestUserEmail(activeUsers[0].email)
+      }
+    }
+  }, [testUsers, selectedTestUserEmail])
+
   useEffect(() => {
     if (templateData?.template_instance) {
       const instance = templateData.template_instance
 
       // If we have test preview data, use it to show REAL personalized preview
       if (testPreviewData?.html) {
+        console.log('Updating preview with test user data:', testPreviewData.test_user)
         // Override template_html with personalized test user preview
         instance.template_html = testPreviewData.html
         instance.test_user_info = testPreviewData.test_user
+      } else {
+        console.log('No test preview data yet')
       }
 
       setTemplateInstance(instance)
@@ -547,8 +561,12 @@ function CampaignEditor() {
 
                         <div className="flex-1 max-w-md">
                           <select
-                            value={selectedTestUserEmail || templateInstance.test_user_info.email}
-                            onChange={(e) => setSelectedTestUserEmail(e.target.value || null)}
+                            value={selectedTestUserEmail || ''}
+                            onChange={(e) => {
+                              const email = e.target.value
+                              console.log('Selected test user email:', email)
+                              setSelectedTestUserEmail(email || null)
+                            }}
                             className="w-full bg-dark-primary text-white border-2 border-accent-blue/40 rounded-lg px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-accent-blue transition-all hover:border-accent-blue/60 cursor-pointer"
                             style={{
                               appearance: 'none',
@@ -559,7 +577,7 @@ function CampaignEditor() {
                               paddingRight: '2.5rem',
                             }}
                           >
-                            {testUsers?.test_users?.filter(u => u.active).map(user => (
+                            {testUsers?.users?.filter(u => u.active).map(user => (
                               <option
                                 key={user.email}
                                 value={user.email}

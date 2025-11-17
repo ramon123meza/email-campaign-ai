@@ -2499,7 +2499,11 @@ def preview_test_user_email(event):
         test_user = test_users[0]
         school_code = test_user.get('school_code', '')
 
-        logger.info(f"Using test user: {test_user['name']} ({test_user['email']}) - School: {school_code}")
+        logger.info(f"========== TEST USER PREVIEW ==========")
+        logger.info(f"Test User Selected: {test_user['name']} ({test_user['email']})")
+        logger.info(f"School Code: {school_code}")
+        logger.info(f"Requested Email: {requested_email or 'None (using first active)'}")
+        logger.info(f"========================================")
 
         # Get products for this test user's school (with fallback logic)
         recipient_data = get_products_for_test_user_preview(campaign_id, school_code)
@@ -2573,7 +2577,10 @@ def get_products_for_test_user_preview(campaign_id, school_code):
         schools_to_try = [school_code] if school_code else []
         schools_to_try.extend([s for s in FALLBACK_SCHOOLS if s != school_code])
 
+        logger.info(f"Searching for products - Preferred school: {school_code}, Will try in order: {schools_to_try[:5]}...")
+
         for try_school in schools_to_try:
+            logger.info(f"Trying school: {try_school}")
             # Query campaign_data for this school
             response = campaign_data_table.query(
                 KeyConditionExpression=Key('campaign_id').eq(campaign_id),
@@ -2583,7 +2590,7 @@ def get_products_for_test_user_preview(campaign_id, school_code):
 
             items = response.get('Items', [])
             if items:
-                logger.info(f"Found products for school {try_school} (preferred: {school_code})")
+                logger.info(f"✓ SUCCESS: Found products for school {try_school} (preferred was: {school_code})")
                 recipient = items[0]
 
                 # Get school information from college-db-email
