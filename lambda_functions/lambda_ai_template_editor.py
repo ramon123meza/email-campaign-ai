@@ -646,6 +646,9 @@ def handle_create_template_instance(event):
         logger.info(f"Analyzing campaign products for: {campaign_id}")
         campaign_analysis = analyze_campaign_products(campaign_id)
 
+        # Track if we successfully generated AI content
+        ai_generation_successful = False
+
         if campaign_analysis:
             logger.info(f"Campaign analysis: {campaign_analysis.get('total_products', 0)} products, {campaign_analysis.get('total_schools', 0)} schools")
 
@@ -655,34 +658,63 @@ def handle_create_template_instance(event):
                 sample_products_html = generate_sample_products_html_for_preview(sample_products)
                 template_config['PRODUCTS_HTML'] = sample_products_html
                 logger.info(f"Generated sample products HTML for {len(sample_products)} products")
+            else:
+                logger.warning("No sample products found, using default placeholder")
 
             # Generate AI-powered metadata
             ai_metadata = generate_ai_campaign_metadata(campaign_analysis)
 
             if ai_metadata:
-                # Update template config with AI-generated content
-                template_config.update({
-                    'CAMPAIGN_TITLE': ai_metadata.get('campaign_title', template_config['CAMPAIGN_TITLE']),
-                    'MAIN_TITLE': ai_metadata.get('main_title', template_config['MAIN_TITLE']),
-                    'GREETING_TEXT': ai_metadata.get('greeting', template_config['GREETING_TEXT']),
-                    'DESCRIPTION_TEXT': ai_metadata.get('description', template_config['DESCRIPTION_TEXT']),
-                    'CTA_TEXT': ai_metadata.get('cta_text', template_config['CTA_TEXT']),
-                    'PRODUCTS_TITLE': ai_metadata.get('products_title', template_config['PRODUCTS_TITLE']),
-                    'PRODUCTS_SUBTITLE': ai_metadata.get('products_subtitle', template_config['PRODUCTS_SUBTITLE'])
-                })
-                logger.info("Applied AI-generated metadata to template")
+                # IMPORTANT: Only use AI values if they're not empty strings
+                # DynamoDB doesn't handle empty strings well, and we want meaningful defaults
+                if ai_metadata.get('campaign_title') and ai_metadata['campaign_title'].strip():
+                    template_config['CAMPAIGN_TITLE'] = ai_metadata['campaign_title']
+                if ai_metadata.get('main_title') and ai_metadata['main_title'].strip():
+                    template_config['MAIN_TITLE'] = ai_metadata['main_title']
+                if ai_metadata.get('greeting') and ai_metadata['greeting'].strip():
+                    template_config['GREETING_TEXT'] = ai_metadata['greeting']
+                if ai_metadata.get('description') and ai_metadata['description'].strip():
+                    template_config['DESCRIPTION_TEXT'] = ai_metadata['description']
+                if ai_metadata.get('cta_text') and ai_metadata['cta_text'].strip():
+                    template_config['CTA_TEXT'] = ai_metadata['cta_text']
+                if ai_metadata.get('products_title') and ai_metadata['products_title'].strip():
+                    template_config['PRODUCTS_TITLE'] = ai_metadata['products_title']
+                if ai_metadata.get('products_subtitle') and ai_metadata['products_subtitle'].strip():
+                    template_config['PRODUCTS_SUBTITLE'] = ai_metadata['products_subtitle']
+
+                logger.info(f"Applied AI-generated metadata: {list(ai_metadata.keys())}")
+                ai_generation_successful = True
             else:
-                logger.info("Using default metadata (AI generation failed)")
+                logger.warning("AI generation failed, using default metadata")
         else:
-            logger.info("No campaign data found, using default metadata")
+            logger.warning("No campaign data found, using default metadata")
 
         # Override with any provided config from request body
         if 'template_config' in body:
             template_config.update(body['template_config'])
 
+        # CRITICAL: Validate that all required config values are non-empty
+        required_fields = ['CAMPAIGN_TITLE', 'MAIN_TITLE', 'DESCRIPTION_TEXT', 'CTA_TEXT']
+        for field in required_fields:
+            if not template_config.get(field) or not str(template_config[field]).strip():
+                default_config = get_default_template_config()
+                template_config[field] = default_config[field]
+                logger.warning(f"Field {field} was empty, using default: {default_config[field]}")
+
+        # Log final config for debugging
+        logger.info(f"Final template_config keys: {list(template_config.keys())}")
+        logger.info(f"MAIN_TITLE: {template_config.get('MAIN_TITLE', 'MISSING')}")
+        logger.info(f"DESCRIPTION_TEXT length: {len(template_config.get('DESCRIPTION_TEXT', ''))}")
+
         # For editor preview: Apply config to template (including sample products)
         # But keep original template with placeholders for per-recipient personalization
         editor_preview_html = apply_template_config(template_html, template_config)
+
+        # Verify template was rendered correctly
+        if '{{MAIN_TITLE}}' in editor_preview_html:
+            logger.error("MAIN_TITLE placeholder still exists in rendered template!")
+        if '<!-- Products will be dynamically inserted here -->' in editor_preview_html:
+            logger.warning("Products placeholder comment still exists in rendered template")
 
         # IMPORTANT: Store raw template for per-recipient personalization
         # We need to keep placeholders like {{PRODUCTS_HTML}}, {{GREETING_TEXT}}, etc.
@@ -699,7 +731,7 @@ def handle_create_template_instance(event):
             'last_modified': datetime.now().isoformat(),
             'ai_chat_history': [],
             'created_at': datetime.now().isoformat(),
-            'ai_generated': bool(campaign_analysis and ai_metadata),
+            'ai_generated': ai_generation_successful and bool(campaign_analysis),
             'campaign_analysis': campaign_analysis if campaign_analysis else {}
         }
 
@@ -731,12 +763,49 @@ def handle_get_template_instance(event):
         
         template_instances_table = dynamodb.Table('campaign_template_instances')
         response = template_instances_table.get_item(Key={'campaign_id': campaign_id})
-        
+
         if 'Item' not in response:
             # Create default template instance if none exists
+            logger.info(f"No template instance found for {campaign_id}, creating new one")
             return handle_create_template_instance(event)
-        
-        return cors_response(200, {'template_instance': response['Item']})
+
+        template_instance = response['Item']
+
+        # VALIDATION: Check if template instance is broken (has empty required fields)
+        template_config = template_instance.get('template_config', {})
+        template_html = template_instance.get('template_html', '')
+
+        # Check if critical fields are missing or empty
+        is_broken = False
+        reasons = []
+
+        if not template_config.get('MAIN_TITLE') or not str(template_config['MAIN_TITLE']).strip():
+            is_broken = True
+            reasons.append("MAIN_TITLE is empty")
+
+        if not template_config.get('DESCRIPTION_TEXT') or not str(template_config['DESCRIPTION_TEXT']).strip():
+            is_broken = True
+            reasons.append("DESCRIPTION_TEXT is empty")
+
+        if '{{MAIN_TITLE}}' in template_html:
+            is_broken = True
+            reasons.append("Placeholders not replaced in template_html")
+
+        if '<!-- Products will be dynamically inserted here -->' in template_html:
+            # This is OK for editor if no campaign data, but log it
+            logger.warning(f"Template has product placeholder comment for campaign {campaign_id}")
+
+        # If template is broken, recreate it
+        if is_broken:
+            logger.warning(f"Template instance for {campaign_id} is broken: {', '.join(reasons)}. Recreating...")
+
+            # Delete the broken instance
+            template_instances_table.delete_item(Key={'campaign_id': campaign_id})
+
+            # Create a new one
+            return handle_create_template_instance(event)
+
+        return cors_response(200, {'template_instance': template_instance})
         
     except Exception as e:
         logger.error(f"Error getting template instance: {e}")
