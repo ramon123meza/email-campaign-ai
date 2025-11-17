@@ -138,6 +138,15 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
 
         logger.info(f"Personalizing for school_code={school_code}, team_name={team_name}")
 
+        # CRITICAL: Replace {{TEAM_NAME}} placeholder globally in the entire HTML
+        # This handles AI-generated content that uses {{TEAM_NAME}} in MAIN_TITLE, DESCRIPTION_TEXT, etc.
+        if team_name and team_name != school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', team_name)
+        elif school_code:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', school_code)
+        else:
+            personalized_html = personalized_html.replace('{{TEAM_NAME}}', 'Your Team')
+
         # Update products title with school name (ALWAYS replace, even if no team_name)
         if team_name and team_name != school_code:
             products_title = f"Featured {team_name} Collection"
