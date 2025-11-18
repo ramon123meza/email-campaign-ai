@@ -143,22 +143,33 @@ function CampaignEditor() {
       setTestEmailsStatus('sending')
     },
     onSuccess: (data) => {
-      console.log('Test email response:', data)
+      console.log('✅ Test email SUCCESS:', data)
       setTestEmailsStatus('success')
-      toast.success(`Test emails sent successfully! ${data?.message || ''}`)
+
+      // Show detailed success message
+      const message = data?.message || 'Test emails sent successfully!'
+      const count = data?.emails_sent || 0
+      const failed = data?.failed_emails || 0
+
+      if (failed > 0) {
+        toast.success(`${message} (${count} sent, ${failed} failed)`, { duration: 5000 })
+      } else {
+        toast.success(`${message} (${count} sent)`, { duration: 4000 })
+      }
+
       setTimeout(() => setTestEmailsStatus(null), 3000)
     },
     onError: (error) => {
-      console.error('Error sending test emails:', error)
-      console.error('Error details:', error.response)
-      // Check if emails were actually sent despite the "error"
-      if (error.message?.includes('sent') || error.response?.data?.message?.includes('sent')) {
-        setTestEmailsStatus('success')
-        toast.success('Test emails sent successfully!')
-      } else {
-        setTestEmailsStatus('error')
-        toast.error(`Failed to send test emails: ${error.message}`)
-      }
+      console.error('❌ Test email ERROR:', error)
+      console.error('Error response:', error.response)
+      console.error('Error message:', error.message)
+
+      // The backend returns proper success now, so any error is real
+      setTestEmailsStatus('error')
+
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Unknown error'
+      toast.error(`Failed to send test emails: ${errorMsg}`, { duration: 5000 })
+
       setTimeout(() => setTestEmailsStatus(null), 3000)
     }
   })

@@ -673,42 +673,49 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
                 logger.warning("Campaign template is not locked - proceeding anyway")
 
         template_config = campaign.get('template_config', {})
-        
+
         # Get template components
         components = get_template_components()
-        
-        # Get batch info
-        batches_table = dynamodb.Table('campaign_batches')
-        batch_response = batches_table.get_item(
-            Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)}
-        )
-        
-        if 'Item' not in batch_response:
-            raise Exception(f"Batch {batch_number} not found for campaign {campaign_id}")
-        
-        batch = batch_response['Item']
-        
-        # Update batch status to sending
-        batches_table.update_item(
-            Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
-            UpdateExpression='SET #status = :status, started_at = :started',
-            ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues={
-                ':status': 'sending',
-                ':started': datetime.now().isoformat()
-            }
-        )
-        
+
+        # Only get and update batch info for NON-TEST emails
+        batch = None
+        if not is_test:
+            # Get batch info
+            batches_table = dynamodb.Table('campaign_batches')
+            batch_response = batches_table.get_item(
+                Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)}
+            )
+
+            if 'Item' not in batch_response:
+                raise Exception(f"Batch {batch_number} not found for campaign {campaign_id}")
+
+            batch = batch_response['Item']
+
+            # Update batch status to sending
+            batches_table.update_item(
+                Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
+                UpdateExpression='SET #status = :status, started_at = :started',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'sending',
+                    ':started': datetime.now().isoformat()
+                }
+            )
+        else:
+            logger.info("TEST MODE: Skipping batch status updates")
+
         # Get campaign data for this batch
         campaign_data_table = dynamodb.Table('campaign_data')
-        
+
         if is_test:
+            logger.info("========== SENDING TEST EMAILS ==========")
             # For test emails, get test users
             test_users_table = dynamodb.Table('test_users')
             response = test_users_table.scan(
                 FilterExpression=Attr('active').eq(True)
             )
             test_users = response.get('Items', [])
+            logger.info(f"Found {len(test_users)} active test users")
 
             # Convert test users to campaign data format with actual products
             test_records = []
@@ -769,6 +776,7 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
         emails_sent = 0
         failed_emails = 0
         start_time = datetime.now()
+        total_recipients = len(records)
 
         # Get template instance for subject line generation
         template_instances_table = dynamodb.Table('campaign_template_instances')
@@ -779,6 +787,8 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
 
         # Base subject line (will be personalized per recipient)
         base_subject = template_config.get('CAMPAIGN_TITLE', 'New Collection Available!')
+
+        logger.info(f"Starting to send {total_recipients} emails...")
 
         for i, record in enumerate(records):
             # Check timeout
@@ -801,7 +811,7 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
             # Send email
             if send_email_ses(record['customer_email'], subject, html_content):
                 emails_sent += 1
-                
+
                 # Mark as sent in database (only for non-test emails)
                 if not is_test:
                     campaign_data_table.update_item(
@@ -817,55 +827,81 @@ def send_batch_emails(campaign_id, batch_number, is_test=False):
                     )
             else:
                 failed_emails += 1
-            
+
+            # Update progress every 10 emails (for non-test batches)
+            if not is_test and (i + 1) % 10 == 0:
+                try:
+                    batches_table.update_item(
+                        Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
+                        UpdateExpression='SET emails_sent = :sent, failed_emails = :failed, progress_percent = :progress',
+                        ExpressionAttributeValues={
+                            ':sent': emails_sent,
+                            ':failed': failed_emails,
+                            ':progress': int((i + 1) / total_recipients * 100)
+                        }
+                    )
+                    logger.info(f"Progress: {i + 1}/{total_recipients} ({int((i + 1) / total_recipients * 100)}%)")
+                except Exception as update_error:
+                    logger.warning(f"Failed to update progress: {update_error}")
+
             # Rate limiting
             if i > 0 and i % EMAILS_PER_SECOND == 0:
                 time.sleep(1)
-        
-        # Update batch completion status
-        batches_table.update_item(
-            Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
-            UpdateExpression='SET #status = :status, emails_sent = :sent, completed_at = :completed, failed_emails = :failed',
-            ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues={
-                ':status': 'completed',
-                ':sent': emails_sent,
-                ':completed': datetime.now().isoformat(),
-                ':failed': failed_emails
-            }
-        )
-        
-        # Update campaign totals
-        campaigns_table.update_item(
-            Key={'campaign_id': campaign_id},
-            UpdateExpression='ADD emails_sent :sent',
-            ExpressionAttributeValues={':sent': emails_sent}
-        )
-        
+
+        # Update batch completion status (ONLY for non-test emails)
+        if not is_test:
+            batches_table.update_item(
+                Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
+                UpdateExpression='SET #status = :status, emails_sent = :sent, completed_at = :completed, failed_emails = :failed',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'completed',
+                    ':sent': emails_sent,
+                    ':completed': datetime.now().isoformat(),
+                    ':failed': failed_emails
+                }
+            )
+
+            # Update campaign totals
+            campaigns_table.update_item(
+                Key={'campaign_id': campaign_id},
+                UpdateExpression='ADD emails_sent :sent',
+                ExpressionAttributeValues={':sent': emails_sent}
+            )
+
+            logger.info(f"Batch {batch_number}: Sent {emails_sent} emails, {failed_emails} failed")
+            message = f'Batch {batch_number} completed successfully'
+        else:
+            logger.info(f"TEST EMAILS: Sent {emails_sent} test emails, {failed_emails} failed")
+            message = f'Test emails sent successfully to {emails_sent} recipients'
+
         return {
             'emails_sent': emails_sent,
             'failed_emails': failed_emails,
-            'message': f'Batch {batch_number} completed successfully'
+            'total_recipients': len(records),
+            'message': message,
+            'is_test': is_test
         }
         
     except Exception as e:
-        logger.error(f"Error sending batch emails: {e}")
-        
-        # Mark batch as failed
-        try:
-            batches_table = dynamodb.Table('campaign_batches')
-            batches_table.update_item(
-                Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
-                UpdateExpression='SET #status = :status, error_message = :error',
-                ExpressionAttributeNames={'#status': 'status'},
-                ExpressionAttributeValues={
-                    ':status': 'failed',
-                    ':error': str(e)
-                }
-            )
-        except Exception as update_error:
-            logger.error(f"Error updating batch status: {update_error}")
-        
+        logger.error(f"Error sending {'test' if is_test else 'batch'} emails: {e}")
+
+        # Mark batch as failed (ONLY for non-test emails)
+        if not is_test:
+            try:
+                batches_table = dynamodb.Table('campaign_batches')
+                batches_table.update_item(
+                    Key={'campaign_id': campaign_id, 'batch_number': int(batch_number)},
+                    UpdateExpression='SET #status = :status, error_message = :error',
+                    ExpressionAttributeNames={'#status': 'status'},
+                    ExpressionAttributeValues={
+                        ':status': 'failed',
+                        ':error': str(e)
+                    }
+                )
+            except Exception as update_error:
+                logger.error(f"Error updating batch status: {update_error}")
+
         raise
 
 def lambda_handler(event, context):
