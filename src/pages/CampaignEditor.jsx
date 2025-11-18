@@ -70,10 +70,14 @@ function CampaignEditor() {
   })
 
   // Fetch test user preview (shows real test user data with products)
+  // ALWAYS fetch fresh personalized preview - never use cached placeholders
   const { data: testPreviewData, isLoading: testPreviewLoading, refetch: refetchTestPreview } = useQuery({
     queryKey: ['test-preview', id, selectedTestUserEmail],
     queryFn: () => campaignAPI.getTestPreview(id, selectedTestUserEmail),
-    enabled: !!id,
+    enabled: !!id && !!selectedTestUserEmail,
+    staleTime: 0, // Always fetch fresh data
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: false, // Don't refetch on window focus (too aggressive)
   })
 
   // AI chat mutation
@@ -218,18 +222,15 @@ function CampaignEditor() {
   }, [testUsers, selectedTestUserEmail])
 
   useEffect(() => {
-    if (templateData?.template_instance) {
-      const instance = templateData.template_instance
+    // ALWAYS use test preview data - never show raw template with placeholders
+    if (testPreviewData?.html) {
+      console.log('✅ Using personalized preview for:', testPreviewData.test_user?.name)
 
-      // If we have test preview data, use it to show REAL personalized preview
-      if (testPreviewData?.html) {
-        console.log('Updating preview with test user data:', testPreviewData.test_user)
-        // Override template_html with personalized test user preview
-        instance.template_html = testPreviewData.html
-        instance.test_user_info = testPreviewData.test_user
-      } else {
-        console.log('No test preview data yet')
-      }
+      const instance = templateData?.template_instance || {}
+
+      // Override with personalized preview
+      instance.template_html = testPreviewData.html
+      instance.test_user_info = testPreviewData.test_user
 
       setTemplateInstance(instance)
 
@@ -239,6 +240,10 @@ function CampaignEditor() {
         ...msg,
         timestamp: new Date(msg.timestamp)
       })))
+    } else {
+      console.log('⏳ Waiting for test preview data...')
+      // Don't set templateInstance until we have personalized data
+      // This prevents showing raw placeholders
     }
   }, [templateData, testPreviewData])
 
@@ -634,7 +639,7 @@ function CampaignEditor() {
                   <EmailCanvas
                     ref={canvasRef}
                     templateInstance={templateInstance}
-                    isLoading={isAIProcessing || testPreviewLoading}
+                    isLoading={isAIProcessing || testPreviewLoading || !templateInstance}
                   />
                 </>
               ) : (
