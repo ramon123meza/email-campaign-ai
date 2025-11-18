@@ -189,10 +189,31 @@ def generate_personalized_email_for_recipient(template_html_raw, template_config
         personalized_html = personalized_html.replace('{{SCHOOL_PAGE}}', school_page)
         personalized_html = personalized_html.replace('{{CTA_SECONDARY_LINK}}', school_page)
 
+        # Step 5b: Ensure CTA button texts are ALWAYS replaced (even if missing from config)
+        cta_primary_text = template_config.get('CTA_PRIMARY_TEXT', 'Shop the Collection')
+        cta_secondary_text = template_config.get('CTA_SECONDARY_TEXT', "Shop Your Team's Collection")
+        personalized_html = personalized_html.replace('{{CTA_PRIMARY_TEXT}}', cta_primary_text)
+        personalized_html = personalized_html.replace('{{CTA_SECONDARY_TEXT}}', cta_secondary_text)
+
+        # Step 5c: Ensure CTA links are replaced
+        cta_primary_link = template_config.get('CTA_PRIMARY_LINK', 'https://www.rrinconline.com')
+        personalized_html = personalized_html.replace('{{CTA_PRIMARY_LINK}}', cta_primary_link)
+
         # Step 6: Replace hero image if school logo is available
         school_logo = recipient.get('school_logo', '')
         if school_logo:
             personalized_html = personalized_html.replace('{{HERO_IMAGE_URL}}', school_logo)
+
+        # Step 7: Catch-all - replace any remaining common placeholders with defaults
+        remaining_replacements = {
+            '{{COMPANY_NAME}}': template_config.get('COMPANY_NAME', 'R and R Imports, Inc.'),
+            '{{COMPANY_ADDRESS}}': template_config.get('COMPANY_ADDRESS', ''),
+            '{{UNSUBSCRIBE_LINK}}': template_config.get('UNSUBSCRIBE_LINK', '#'),
+            '{{FOOTER_TEXT}}': template_config.get('FOOTER_TEXT', ''),
+        }
+        for placeholder, value in remaining_replacements.items():
+            if value:  # Only replace if we have a value
+                personalized_html = personalized_html.replace(placeholder, str(value))
 
         return personalized_html
 
